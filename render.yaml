@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: weardhk-design-hub
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/status
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SYNC_MINUTES
+        value: "5"
+      - key: APP_PASSWORD
+        generateValue: true
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
