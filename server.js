@@ -8,7 +8,7 @@ const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env
 let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 let catalogue=snapshot.slice(),syncedAt=null,errors=[],scannedFolders=0,syncing=false,sourceStats={};
 const encode=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
-const isArabicDesign=name=>/(arabic|kufic|calligraphy|islamic|allah|quran|surah|bismillah|alhamdulillah|tawhid|taqwa|shukr|iman|barakah|noor|sabr|ayat|hadith|masjid|adil|istiqamah|qalb|hasbunallah|sami_allahu)/i.test(String(name||''));
+const isArabicDesign=name=>{const value=String(name||'');return !/(bangla|bengali)/i.test(value)&&/(?:^|[^a-z])(arabic|kufic|calligraphy|islamic|allah|quran|surah|bismillah|alhamdulillah|tawhid|taqwa|shukr|iman|barakah|noor|sabr|ayat|hadith|masjid|adil|istiqamah|qalb|hasbunallah|sami_allahu)(?:[^a-z]|$)/i.test(value)};
 let tokenCache={token:'',expiry:0};
 async function token(){
  if(process.env.GOOGLE_DRIVE_ACCESS_TOKEN)return process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
