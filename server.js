@@ -5,7 +5,7 @@ const roots=[
  {id:'1QImLRpunvmjkhHc8_CqewTw7u6lqvoLb',name:'Organised Library'},
  {id:'1MPdvOZSFs0uUwS3qYOzY9m5-_61DloDW',name:'New Designs'}];
 const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5));
-let catalogue=[],syncedAt=null,errors=[],scannedFolders=0,syncing=false;
+let catalogue=[],syncedAt=null,errors=[],scannedFolders=0,syncing=false,sourceStats={};
 const encode=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
 let tokenCache={token:'',expiry:0};
 async function token(){
@@ -30,16 +30,16 @@ async function children(id){
  const data=await(await drive(u)).json();found.push(...(data.files||[]));next=data.nextPageToken||'';}while(next);return found;
 }
 async function sync(){
- if(syncing)return;syncing=true;const rows=[],failures=[],seen=new Set();let count=0;
+ if(syncing)return;syncing=true;const rows=[],failures=[],seen=new Set(),stats=Object.fromEntries(roots.map(x=>[x.name,{files:0,folders:0,errors:0}]));let count=0;
  try{const queue=roots.map(root=>({id:root.id,source:root.name,path:[]}));while(queue.length){
- const batch=queue.splice(0,5);await Promise.all(batch.map(async task=>{if(seen.has(task.id))return;seen.add(task.id);
- try{const files=await children(task.id);count++;for(const file of files){
+ const batch=queue.splice(0,5);await Promise.all(batch.map(async task=>{if(seen.has(task.source+':'+task.id))return;seen.add(task.source+':'+task.id);
+ try{const files=await children(task.id);count++;stats[task.source].folders++;for(const file of files){
  if(file.mimeType==='application/vnd.google-apps.folder'){queue.push({id:file.id,source:task.source,path:[...task.path,file.name]});continue;}
  if(!(/^image\//.test(file.mimeType||'')||/\.(ai|eps|svg|pdf|psd|webp|png|jpe?g|avif|tiff?)$/i.test(file.name)))continue;
- rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink,thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
- }catch(e){failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));}
- if(!failures.length||rows.length||!catalogue.length){catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();}
- errors=failures;scannedFolders=count;
+ stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink,thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
+ }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));}
+ if(!failures.length){catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();} else {console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
+ errors=failures;scannedFolders=count;sourceStats=stats;
  }catch(e){errors=[e.message]}finally{syncing=false;}
 }
 function duplicateIds(){const hashes=new Map(),dupes=new Set();for(const x of catalogue){if(!x.checksum)continue;const key=x.checksum+':'+x.size;if(!hashes.has(key))hashes.set(key,[]);hashes.get(key).push(x)}for(const group of hashes.values()){if(group.length<2)continue;group.sort((a,b)=>a.updated.localeCompare(b.updated)||a.id.localeCompare(b.id));for(const x of group.slice(1))dupes.add(x.id)}return dupes}
@@ -83,7 +83,7 @@ async function handler(req,res){
  }
  if(!requireSession(req,res,u))return;
  try{
- if(u.pathname==='/api/status')return json(res,{duplicates:duplicateIds().size,count:catalogue.length,syncedAt,errors:errors.slice(0,15),scannedFolders,syncing,connected:!!(process.env.GOOGLE_DRIVE_ACCESS_TOKEN||process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE),roots,interval});
+ if(u.pathname==='/api/status')return json(res,{duplicates:duplicateIds().size,count:catalogue.length,syncedAt,errors:errors.slice(0,15),scannedFolders,sourceStats,complete:!!syncedAt&&!errors.length,syncing,connected:!!(process.env.GOOGLE_DRIVE_ACCESS_TOKEN||process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE),roots,interval});
  if(u.pathname==='/api/categories'){const map=new Map();for(const x of catalogue){const key=x.source+'|||'+x.category;map.set(key,(map.get(key)||0)+1);}return json(res,{categories:[...map].map(([k,count])=>({source:k.split('|||')[0],name:k.split('|||')[1],count})).sort((a,b)=>b.count-a.count)})}
  if(u.pathname==='/api/designs'){const q=(u.searchParams.get('q')||'').toLowerCase(),source=u.searchParams.get('source')||'All',cat=u.searchParams.get('category')||'All',sort=u.searchParams.get('sort')||'newest';const view=u.searchParams.get('view')||'all',duplicateSet=duplicateIds();const limit=Math.max(1,Math.min(120,Number(u.searchParams.get('limit')||48))),page=Math.max(1,Number(u.searchParams.get('page')||1));
  let list=catalogue.filter(x=>(view==='duplicates'?duplicateSet.has(x.id):!duplicateSet.has(x.id))&&(source==='All'||x.source===source)&&(cat==='All'||x.category===cat)&&(!q||(x.name+' '+x.folder+' '+x.description).toLowerCase().includes(q)));
