@@ -1,5 +1,5 @@
 'use strict';
-const state={source:'All',category:'All',sort:'newest',q:'',page:1,favOnly:false,duplicatesOnly:false,selected:null,items:[],total:0,pages:1,roots:[],categories:[]};
+const state={source:'Organised Library',category:'All',sort:'newest',q:'',page:1,favOnly:false,duplicatesOnly:false,selected:null,items:[],total:0,pages:1,roots:[],categories:[]};
 const $=id=>document.getElementById(id);
 const saved=()=>{try{return new Set(JSON.parse(localStorage.getItem('weardhk-favourites')||'[]'))}catch{return new Set()}};
 let favs=saved(),timer;
