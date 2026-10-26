@@ -43,16 +43,44 @@ async function sync(){
  }catch(e){errors=[e.message]}finally{syncing=false;}
 }
 function json(res,obj,status=200){res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(obj))}
-function pass(req,res){
- const expected=process.env.APP_PASSWORD;if(!expected)return true;let actual='';
- try{actual=Buffer.from((req.headers.authorization||'').replace(/^Basic /i,''),'base64').toString().split(':').slice(1).join(':')}catch{}
- const a=Buffer.from(actual),b=Buffer.from(expected);
- if(a.length===b.length&&crypto.timingSafeEqual(a,b))return true;
- res.writeHead(401,{'www-authenticate':'Basic realm="WearDHK Design Hub"'});res.end('Authentication required');return false;
+const SESSION_COOKIE='weardhk_session';
+function loginHtml(message=''){
+ return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WearDHK sign in</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f1eb;color:#20231f;font:16px system-ui,-apple-system,sans-serif;padding:24px}.card{width:min(100%,420px);background:#fff;border:1px solid #e5e0d8;border-radius:22px;padding:30px;box-shadow:0 18px 60px #28231a18}h1{font-size:26px;margin:0 0 8px}.muted{color:#68706a;margin:0 0 24px}label{display:block;font-weight:650;margin:0 0 8px}input{width:100%;font:inherit;padding:14px 15px;border:1px solid #cfcfc7;border-radius:12px;margin-bottom:18px}button{width:100%;border:0;border-radius:12px;background:#243c2d;color:white;font:inherit;font-weight:700;padding:14px;cursor:pointer}.error{color:#a32424;background:#fff0ef;border-radius:10px;padding:10px 12px;margin:0 0 16px}</style><main class="card"><h1>WearDHK Design Hub</h1><p class="muted">Enter your catalogue password to continue.</p>${message?'<p class="error">Password not recognised. Please try again.</p>':''}<form method="post" action="/login"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus><button type="submit">Sign in</button></form></main></html>`;
+}
+function validSession(req){
+ const expected=process.env.APP_PASSWORD;if(!expected)return true;
+ const cookies=Object.fromEntries((req.headers.cookie||'').split(';').map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf('=');return i<0?[x,'']:[x.slice(0,i),x.slice(i+1)]}));
+ const raw=cookies[SESSION_COOKIE]||'',parts=raw.split('.');if(parts.length!==2)return false;
+ const expiry=Number(parts[0]);if(!Number.isFinite(expiry)||expiry<Date.now())return false;
+ const wanted=crypto.createHmac('sha256',expected).update(String(expiry)).digest();
+ let supplied;try{supplied=Buffer.from(parts[1],'base64url')}catch{return false}
+ return supplied.length===wanted.length&&crypto.timingSafeEqual(supplied,wanted);
+}
+function issueSession(res){
+ const expiry=Date.now()+7*24*60*60*1000;
+ const sig=crypto.createHmac('sha256',process.env.APP_PASSWORD).update(String(expiry)).digest('base64url');
+ res.writeHead(303,{'location':'/','set-cookie':SESSION_COOKIE+'='+expiry+'.'+sig+'; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800','cache-control':'no-store'});res.end();
+}
+function requireSession(req,res,u){
+ if(validSession(req))return true;
+ if(u.pathname.startsWith('/api/'))return json(res,{error:'Please sign in to continue'},401),false;
+ res.writeHead(303,{'location':'/login','cache-control':'no-store'});res.end();return false;
 }
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml'};
 async function handler(req,res){
- if(!pass(req,res))return;const u=new URL(req.url,'http://localhost');
+ const u=new URL(req.url,'http://localhost');
+ if(u.pathname==='/login'){
+  if(req.method==='GET'){res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"});return res.end(loginHtml());}
+  if(req.method==='POST'){
+   let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)break;}
+   const submitted=new URLSearchParams(raw).get('password')||'',expected=process.env.APP_PASSWORD||'';
+   const a=Buffer.from(submitted),b=Buffer.from(expected);
+   if(expected&&a.length===b.length&&crypto.timingSafeEqual(a,b))return issueSession(res);
+   res.writeHead(401,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"});return res.end(loginHtml(true));
+  }
+  res.writeHead(405,{'allow':'GET, POST'});return res.end();
+ }
+ if(!requireSession(req,res,u))return;
  try{
  if(u.pathname==='/api/status')return json(res,{count:catalogue.length,syncedAt,errors:errors.slice(0,15),scannedFolders,syncing,connected:!!(process.env.GOOGLE_DRIVE_ACCESS_TOKEN||process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE),roots,interval});
  if(u.pathname==='/api/categories'){const map=new Map();for(const x of catalogue){const key=x.source+'|||'+x.category;map.set(key,(map.get(key)||0)+1);}return json(res,{categories:[...map].map(([k,count])=>({source:k.split('|||')[0],name:k.split('|||')[1],count})).sort((a,b)=>b.count-a.count)})}
