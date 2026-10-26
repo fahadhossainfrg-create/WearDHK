@@ -5,7 +5,7 @@ const roots=[
  {id:'1QImLRpunvmjkhHc8_CqewTw7u6lqvoLb',name:'Organised Library'},
  {id:'1MPdvOZSFs0uUwS3qYOzY9m5-_61DloDW',name:'New Designs'}];
 const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5));
-let snapshot=[];try{snapshot=JSON.parse(fs.readFileSync(path.join(__dirname,'catalogue-snapshot.json'),'utf8'));if(!Array.isArray(snapshot))snapshot=[];}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
+let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 let catalogue=snapshot.slice(),syncedAt=null,errors=[],scannedFolders=0,syncing=false,sourceStats={};
 const encode=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
 let tokenCache={token:'',expiry:0};
@@ -43,7 +43,7 @@ async function sync(){
  errors=failures;scannedFolders=count;sourceStats=stats;
  }catch(e){errors=[e.message]}finally{syncing=false;}
 }
-function duplicateIds(){const hashes=new Map(),dupes=new Set();for(const x of catalogue){if(!x.checksum)continue;const key=x.checksum+':'+x.size;if(!hashes.has(key))hashes.set(key,[]);hashes.get(key).push(x)}for(const group of hashes.values()){if(group.length<2)continue;group.sort((a,b)=>a.updated.localeCompare(b.updated)||a.id.localeCompare(b.id));for(const x of group.slice(1))dupes.add(x.id)}return dupes}
+function duplicateIds(){const hashes=new Map(),dupes=new Set();for(const x of catalogue){if(x.confirmedDuplicate)dupes.add(x.id);if(!x.checksum)continue;const key=x.checksum+':'+x.size;if(!hashes.has(key))hashes.set(key,[]);hashes.get(key).push(x)}for(const group of hashes.values()){if(group.length<2)continue;group.sort((a,b)=>a.updated.localeCompare(b.updated)||a.id.localeCompare(b.id));for(const x of group.slice(1))dupes.add(x.id)}return dupes}
 function json(res,obj,status=200){res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(obj))}
 const SESSION_COOKIE='weardhk_session';
 function loginHtml(message=''){
