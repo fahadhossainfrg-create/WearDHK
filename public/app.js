@@ -1,0 +1,35 @@
+'use strict';
+const state={source:'All',category:'All',sort:'newest',q:'',page:1,favOnly:false,selected:null,items:[],total:0,pages:1,roots:[],categories:[]};
+const $=id=>document.getElementById(id);
+const saved=()=>{try{return new Set(JSON.parse(localStorage.getItem('weardhk-favourites')||'[]'))}catch{return new Set()}};
+let favs=saved(),timer;
+const clean=s=>String(s||'').replace(/\.(png|jpg|jpeg|webp|svg|ai|eps|pdf|psd|avif)$/i,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();
+function toggleFav(id){favs.has(id)?favs.delete(id):favs.add(id);localStorage.setItem('weardhk-favourites',JSON.stringify([...favs]));render();if(state.selected?.id===id)modalFavorite()}
+async function api(url,options){const r=await fetch(url,options);const x=await r.json();if(!r.ok)throw Error(x.error||'Server error');return x}
+function note(msg){$('notice').hidden=!msg;$('notice').textContent=msg}
+function sourceButtons(){const el=$('sources');el.innerHTML='';for(const source of ['All',...state.roots.map(x=>x.name)]){const b=document.createElement('button');b.className='source'+(state.source===source?' selected':'');b.textContent=(source==='All'?'◫ ':'▣ ')+(source==='All'?'All collections':source);b.onclick=()=>{state.source=source;state.category='All';state.page=1;sourceButtons();categories();refresh()};el.appendChild(b)}}
+function categories(){const list=state.categories.filter(x=>state.source==='All'||x.source===state.source);const names=[...new Set(list.map(x=>x.name))].sort();const el=$('category');el.innerHTML='';for(const name of ['All',...names]){const option=document.createElement('option');option.value=name;option.textContent=name==='All'?'All categories':name;el.appendChild(option)}if(!names.includes(state.category))state.category='All';el.value=state.category}
+function modalFavorite(){$('modalFavorite').textContent=favs.has(state.selected.id)?'♥ Saved':'♡ Save favourite'}
+function detail(x){state.selected=x;$('modalSource').textContent=x.source+' / '+x.category;$('modalTitle').textContent=clean(x.name);$('modalPath').textContent=x.folder||'Root directory';$('openDrive').href=x.url;const host=$('modalImage');host.innerHTML='';if(x.preview){const img=document.createElement('img');img.src='/api/image/'+encodeURIComponent(x.id);img.alt=clean(x.name);img.onerror=()=>{host.textContent='Preview unavailable — open in Drive'};host.append(img)}else{host.textContent='Preview available in Google Drive'}modalFavorite();$('preview').showModal()}
+function render(){const host=$('gallery');host.innerHTML='';const list=state.favOnly?state.items.filter(x=>favs.has(x.id)):state.items;
+ for(const x of list){const tile=document.createElement('article');tile.className='tile';const wrap=document.createElement('div');wrap.className='image-wrap';wrap.onclick=()=>detail(x);if(x.preview){const img=document.createElement('img');img.loading='lazy';img.alt=clean(x.name);img.src='/api/image/'+encodeURIComponent(x.id);img.onerror=()=>{img.remove();const span=document.createElement('span');span.className='fallback';span.textContent='◇';wrap.prepend(span)};wrap.append(img)}else{const icon=document.createElement('span');icon.textContent='◇';icon.className='fallback';wrap.append(icon)}
+ const tag=document.createElement('span');tag.className='mini-source';tag.textContent=x.source;wrap.append(tag);
+ const fav=document.createElement('button');fav.className='favorite'+(favs.has(x.id)?' saved':'');fav.textContent=favs.has(x.id)?'♥':'♡';fav.title='Save favourite';fav.onclick=e=>{e.stopPropagation();toggleFav(x.id)};wrap.append(fav);
+ const info=document.createElement('div');info.className='tile-info';const title=document.createElement('div');title.className='tile-title';title.textContent=clean(x.name);title.onclick=()=>detail(x);const p=document.createElement('div');p.className='path';p.textContent=x.folder||x.category;const a=document.createElement('a');a.textContent='Open in Drive ↗';a.href=x.url;a.target='_blank';a.rel='noopener';info.append(title,p,a);tile.append(wrap,info);host.append(tile)}
+ if(!list.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='No designs found. Try another search or connect the Google Drive backend.';host.append(empty)}
+ $('count').textContent=(state.favOnly?list.length:state.total).toLocaleString()+' designs';$('pagination').textContent='Page '+state.page+' of '+state.pages;$('previous').disabled=state.page<=1;$('next').disabled=state.page>=state.pages;
+ $('favorites').textContent=state.favOnly?'♥ Showing favourites':'♡ Favourites';
+}
+async function refresh(){try{const p=new URLSearchParams({q:state.q,category:state.category,source:state.source,sort:state.sort,page:String(state.page),limit:'48'});const x=await api('/api/designs?'+p);state.items=x.items;state.total=x.total;state.pages=x.pages;render()}catch(e){note('Unable to load designs: '+e.message)}}
+async function status(){try{const x=await api('/api/status');state.roots=x.roots;$('totalDesigns').textContent=x.count.toLocaleString();$('folders').textContent=x.scannedFolders.toLocaleString();$('updated').textContent=x.syncedAt?new Date(x.syncedAt).toLocaleDateString():'Not synced';$('dot').classList.toggle('online',x.connected);$('connection').textContent=x.connected?'Drive credentials configured':'Drive not yet connected';if(!x.connected)note('Connect Google Drive credentials on the Node.js hosting server to display your private designs. See README in GitHub.');else if(x.errors.length)note('Some folders could not be scanned: '+x.errors[0]);else note('');sourceButtons();const c=await api('/api/categories');state.categories=c.categories;categories();await refresh()}catch(e){note('Connection error: '+e.message)}}
+$('query').oninput=e=>{clearTimeout(timer);timer=setTimeout(()=>{state.q=e.target.value;state.page=1;refresh()},230)};
+$('category').onchange=e=>{state.category=e.target.value;state.page=1;refresh()};
+$('sort').onchange=e=>{state.sort=e.target.value;state.page=1;refresh()};
+$('previous').onclick=()=>{state.page--;refresh();window.scrollTo({top:360,behavior:'smooth'})};
+$('next').onclick=()=>{state.page++;refresh();window.scrollTo({top:360,behavior:'smooth'})};
+$('favorites').onclick=()=>{state.favOnly=!state.favOnly;render()};
+$('sync').onclick=async()=>{try{await api('/api/sync',{method:'POST'});note('Sync started. Refresh the page after indexing completes.')}catch(e){note('Sync unavailable: '+e.message)}};
+$('modalFavorite').onclick=()=>toggleFav(state.selected.id);
+$('close').onclick=()=>$('preview').close();
+$('preview').onclick=e=>{if(e.target===$('preview'))$('preview').close()};
+status();setInterval(status,5*60*1000);
