@@ -122,3 +122,14 @@ html{scroll-behavior:smooth}
 #tabTop20.active{color:#203f50;border-bottom-color:#203f50;font-weight:700}
 #tabTop20{white-space:nowrap}
 .library-tabs{overflow-x:auto;scrollbar-width:thin}
+
+/* Automatic artwork previews in most-downloaded collection */
+.leader-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.leader-preview{padding:8px;gap:10px;min-height:78px;background:#fff;align-items:center}
+.leader-thumb{width:60px;height:60px;flex:0 0 60px;border-radius:9px;background:#ecf1f3;display:grid;place-items:center;overflow:hidden;font-size:21px;color:#9daeb7}
+.leader-thumb img{width:100%;height:100%;object-fit:contain;display:block}
+.leader-meta{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.leader-meta small{font-size:9px;font-weight:700;letter-spacing:.04em;color:#87969c}
+.leader-preview .leader-name{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:600}
+.leader-preview strong{align-self:flex-end;padding:0 3px 4px 0;font-size:11px;color:#284857}
+@media(max-width:750px){.leader-list{grid-template-columns:1fr}.leader-thumb{width:70px;height:70px;flex-basis:70px}}
