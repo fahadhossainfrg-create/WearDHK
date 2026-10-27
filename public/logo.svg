@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>WearDHK logo</title>
+  <g fill="#c3fc71">
+    <path d="M5 28 13 23v17l8 5v9L5 45z"/>
+    <path d="M19 17 27 12v28l9 5v9L19 44z"/>
+    <path d="M35 21 43 16v24l9 5v9L35 44z"/>
+    <path d="M51 30 59 25v25l-8-5z"/>
+  </g>
+</svg>
