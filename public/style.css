@@ -4,3 +4,24 @@
 
 /* Original WearDHK navy logo: provide contrast on dark navigation. */
 .brand-logo{width:54px;height:54px;flex:0 0 54px;background:#fff;border-radius:12px;padding:5px;object-fit:contain}
+
+/* WearDHK brand reference: ink navy, warm white and charcoal; Poppins throughout */
+:root{font-family:'Poppins',system-ui,sans-serif;color:#213138;background:#f4f4f3}
+body,button,input,select,dialog{font-family:'Poppins',system-ui,sans-serif}
+.sidebar{background:#1d3037;color:#f6f6f5}
+.brand strong{color:#f8f8f8}.accent{color:#dce0e4}.brand small,.side-label,.side-bottom{color:#bac5c9}
+.source{color:#dde2e3}.source:hover,.source.selected{background:#324851;color:#fff}
+.dot.online{background:#75bba9}.main{background:#f4f4f3}
+.eyebrow{color:#526976}h1,h2{color:#20313a}h1 em{color:#526e7d}.subtitle{color:#65757e}
+.primary{background:#1d3037;border-color:#1d3037;color:white}.primary:hover{background:#324e5a}
+.secondary{color:#20313a;border-color:#d4d9dc}.secondary:hover{background:#e9edf0}
+.stat,.tile,.empty{background:#fff;border-color:#dbe0e2}.stat small,.result-count{color:#657680}.stat span,.tile-info .path{color:#75858e}
+.toolbar select,.search{border-color:#ced5d9;color:#20313a}.tile-info a{color:#284e65}
+.image-wrap,.modal-image{background:#edf0f1}.mini-source{color:#20313a}
+.favorite{color:#1d3037;border:1px solid #cbd4d8;box-shadow:0 2px 12px #13232b1a}
+.favorite.saved{background:#203747;color:#fff;border-color:#203747}
+.favorite:focus-visible,.secondary:focus-visible,.primary:focus-visible{outline:3px solid #89a9bf;outline-offset:2px}
+.library-tabs{border-color:#d6dfe3}.library-tab{color:#61747f}.library-tab.active{color:#1d3037;border-bottom-color:#1d3037}.library-tab:hover{color:#284e65}
+.notice{background:#e9f1f4;border-color:#cadde5;color:#2f5262}
+.brand-logo{background:#f6f6f6}
+@media(max-width:750px){.head-actions{flex-wrap:wrap}.head-actions button{min-width:calc(50% - 8px)}.modal-actions{flex-wrap:wrap}}
