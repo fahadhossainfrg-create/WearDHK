@@ -58,3 +58,11 @@ html{scroll-behavior:smooth}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 .preview-error{font-size:11px;font-weight:650;color:#536975;text-align:center;padding:0 12px}.preview-retry{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);background:#1d3037;color:white;border:0;padding:6px 13px;border-radius:8px;font-size:11px;z-index:2}.preview-recovery{font-size:14px;font-weight:700;color:#465a63}.modal-image:has(.preview-recovery){display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;flex-direction:column}
+
+/* Faster discovery and preview actions */
+.modal-actions{flex-wrap:wrap}.modal-actions a,.modal-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:42px}.head-actions{flex-wrap:wrap}
+#surprise{border-color:#9caeb8;background:linear-gradient(130deg,#fff,#edf4f7);transition:transform .2s,background .2s}
+#surprise:hover{transform:translateY(-2px);background:#dae7ed}
+#modalPrev,#modalNext{min-width:48px;background:#e6eef2;border-color:#c9dbe3;font-size:17px}
+#copyLink{background:#eef4f6}
+@media(max-width:750px){.modal-actions a,.modal-actions button{white-space:normal;flex:1 1 43%}.head-actions button{font-size:11px;padding:11px 10px}}
