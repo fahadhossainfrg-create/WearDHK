@@ -66,3 +66,13 @@ html{scroll-behavior:smooth}
 #modalPrev,#modalNext{min-width:48px;background:#e6eef2;border-color:#c9dbe3;font-size:17px}
 #copyLink{background:#eef4f6}
 @media(max-width:750px){.modal-actions a,.modal-actions button{white-space:normal;flex:1 1 43%}.head-actions button{font-size:11px;padding:11px 10px}}
+
+/* WearDHK dynamic navigation */
+#recent.active-recent{background:#1d3037;color:#fff;border-color:#1d3037}
+.clear-filters{font-size:11px;padding:12px 14px}
+.active-filters{font-size:11px;color:#435b67;font-weight:600;margin:-8px 0 15px}
+.active-filters[hidden]{display:none}
+.back-top{position:fixed;bottom:25px;left:270px;width:45px;height:45px;border:1px solid #b8c9d2;border-radius:14px;background:#1d3037;color:white;font-size:23px;box-shadow:0 8px 25px #142b3c33;z-index:15;opacity:0;pointer-events:none;transform:translateY(12px);transition:opacity .2s,transform .2s}
+.back-top.show{opacity:1;pointer-events:auto;transform:translateY(0)}
+.tile:focus-within{outline:2px solid #8aaabb;outline-offset:2px}
+@media(max-width:750px){.back-top{left:16px;bottom:16px}.clear-filters{flex:1}.toolbar{align-items:stretch}}
