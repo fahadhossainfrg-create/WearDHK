@@ -45,8 +45,13 @@ $('sync').onclick=manualSync;
 $('recent').onclick=()=>{state.recentOnly=!state.recentOnly;state.favOnly=false;state.duplicatesOnly=false;state.q='';state.category='All';state.page=1;$('query').value='';categories();refresh()};
 function updateActiveFilters(){const box=$('activeFilters');if(!box)return;const values=[state.recentOnly?'Recently viewed':null,state.favOnly?'Favourites':null,state.q?'Search: '+state.q:null,state.category!=='All'?state.category:null].filter(Boolean);box.textContent=values.join(' · ');box.hidden=!values.length}
 $('clearFilters').onclick=()=>{state.q='';state.category='All';state.page=1;state.recentOnly=false;state.favOnly=false;state.duplicatesOnly=false;$('query').value='';categories();refresh();toast('Filters cleared')};
-$('backToTop').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
-window.addEventListener('scroll',()=>{$('backToTop').classList.toggle('show',window.scrollY>500)},{passive:true});
+function scrollToPageTop(){const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;const root=document.scrollingElement||document.documentElement;window.scrollTo({top:0,left:0,behavior:reduce?'instant':'smooth'});root.scrollTop=0;if(document.body.scrollTop)document.body.scrollTop=0}
+function updateBackToTop(){const amount=Math.max(window.scrollY,document.documentElement.scrollTop,document.body.scrollTop);const btn=$('backToTop');const visible=amount>260;btn.classList.toggle('show',visible);btn.hidden=!visible;btn.setAttribute('aria-hidden',String(!visible))}
+$('backToTop').onclick=scrollToPageTop;
+window.addEventListener('scroll',updateBackToTop,{passive:true});
+window.addEventListener('resize',updateBackToTop,{passive:true});
+updateBackToTop();
+$('viewShuffle').onclick=()=>{if(state.items.length<2){toast('Open a collection with more designs');return}for(let i=state.items.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[state.items[i],state.items[k]]=[state.items[k],state.items[i]]}render();toast('Shuffled the current page ✦')};
 $('surprise').onclick=()=>{if(!state.items.length){toast('No artwork loaded yet');return;}const random=state.items[Math.floor(Math.random()*state.items.length)];detail(random)};
 $('modalPrev').onclick=()=>stepPreview(-1);
 $('modalNext').onclick=()=>stepPreview(1);
