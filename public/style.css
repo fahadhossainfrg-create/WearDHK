@@ -117,3 +117,8 @@ html{scroll-behavior:smooth}
 .focus-mode .download-leaders{display:none}
 @media(max-width:1150px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}.download-leaders{flex-direction:column}.leader-list{width:100%;max-width:none}}
 @media(max-width:750px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.download-leaders{padding:18px}.leader-list{grid-template-columns:1fr}}
+
+/* Distinct top-downloads tab */
+#tabTop20.active{color:#203f50;border-bottom-color:#203f50;font-weight:700}
+#tabTop20{white-space:nowrap}
+.library-tabs{overflow-x:auto;scrollbar-width:thin}
