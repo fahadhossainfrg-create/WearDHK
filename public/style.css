@@ -85,3 +85,22 @@ html{scroll-behavior:smooth}
 .back-top:focus-visible{outline:3px solid #8ab0ca;outline-offset:3px}
 #viewShuffle{font-size:21px}
 @media(max-width:750px){.back-top{right:max(16px,env(safe-area-inset-right))!important;bottom:max(88px,calc(env(safe-area-inset-bottom) + 80px))!important;left:auto!important}}
+
+/* Minimal studio refresh */
+:root{--ink:#1d3037;--paper:#f7f8f8;--line:#e1e6e8;--muted:#677982}
+.main{background:var(--paper)}.sidebar{background:var(--ink)}.sidebar .source{border-radius:12px}
+.topbar{gap:22px}.head-actions{align-items:center}.head-actions .secondary,.head-actions .primary{padding:10px 13px;border-radius:12px;font-size:11px}
+.studio-banner{padding:27px 33px;border-radius:20px;margin-top:24px;background:linear-gradient(110deg,#1d3037,#324d59)}
+.studio-banner:after{opacity:.38}.studio-banner h2{font-size:clamp(22px,2.5vw,31px)}
+.stats{margin:20px 0 38px;gap:11px}.stat{padding:17px 19px;border-radius:14px;box-shadow:none}.stat strong{font-size:30px;margin:7px 0}
+.explore{scroll-margin-top:24px}.library-tabs{margin-bottom:25px}.section-title{margin-bottom:17px}
+.gallery{gap:13px}.tile{border-radius:16px;box-shadow:none}.tile:hover{transform:translateY(-2px);box-shadow:0 11px 24px #20343f12}
+.image-wrap{background:#f0f3f4}.image-wrap img{transition:transform .25s}.tile:hover .image-wrap img{transform:scale(1.025)}
+.tile-info{padding:14px}.tile-info a{display:inline-block;margin-right:8px;margin-top:3px}
+.search,.toolbar select{border-radius:13px}.quickbar{margin:0 0 11px}.chip{border-radius:11px;padding:9px 13px}
+.library-tab{transition:color .18s,border-color .18s}.studio-cta{border-radius:12px}
+#focusMode[aria-pressed=true]{background:#203842;color:#fff;border-color:#203842}
+.focus-mode .sidebar,.focus-mode .studio-banner,.focus-mode .stats,.focus-mode footer{display:none}
+.focus-mode .main{max-width:none;padding:24px clamp(16px,4vw,70px)}.focus-mode .topbar{margin-bottom:24px}
+.focus-mode .topbar h1{font-size:36px;letter-spacing:-1.4px}.focus-mode .topbar .subtitle,.focus-mode .topbar .eyebrow{display:none}
+@media(max-width:750px){.main{padding:20px 15px}.studio-banner{padding:23px}.stats{gap:9px}.stat{padding:14px}.stat strong{font-size:25px}.head-actions{gap:6px}.head-actions button{min-width:0!important;flex:1 1 28%}.focus-mode .main{padding:18px 13px}.focus-mode .topbar h1{font-size:29px}}
