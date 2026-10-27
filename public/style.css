@@ -76,3 +76,12 @@ html{scroll-behavior:smooth}
 .back-top.show{opacity:1;pointer-events:auto;transform:translateY(0)}
 .tile:focus-within{outline:2px solid #8aaabb;outline-offset:2px}
 @media(max-width:750px){.back-top{left:16px;bottom:16px}.clear-filters{flex:1}.toolbar{align-items:stretch}}
+
+/* Back to top fix: screen anchored, clear of sidebar and touch gestures */
+.back-top{position:fixed!important;right:max(18px,env(safe-area-inset-right))!important;left:auto!important;bottom:max(24px,env(safe-area-inset-bottom))!important;width:54px;height:54px;border-radius:18px;z-index:100;touch-action:manipulation;cursor:pointer;display:grid;place-items:center;box-shadow:0 12px 32px #0f273d44}
+.back-top[hidden]{display:none!important}
+.back-top.show{visibility:visible;opacity:1;pointer-events:auto;transform:translateY(0)}
+.back-top:hover{background:#355769;transform:translateY(-3px)}
+.back-top:focus-visible{outline:3px solid #8ab0ca;outline-offset:3px}
+#viewShuffle{font-size:21px}
+@media(max-width:750px){.back-top{right:max(16px,env(safe-area-inset-right))!important;bottom:max(88px,calc(env(safe-area-inset-bottom) + 80px))!important;left:auto!important}}
