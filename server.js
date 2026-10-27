@@ -22,7 +22,11 @@ async function restoreDriveStats(){
  const id=process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID;if(!id)return;
  try{const result=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media')).json();
  if(!result||typeof result.counts!=='object'||Array.isArray(result.counts))throw Error('Unexpected statistics backup format');
- downloadCounts=Object.fromEntries(Object.entries(result.counts).filter(([id,n])=>id&&Number.isSafeInteger(n)&&n>=0));
+ const incoming=Object.fromEntries(Object.entries(result.counts).filter(([id,n])=>id&&Number.isSafeInteger(n)&&n>=0));
+ // Never replace newer local increments with an older Drive snapshot.
+ for(const [key,value] of Object.entries(incoming))downloadCounts[key]=Math.max(Number(downloadCounts[key]||0),value);
+ const driveBehind=Object.entries(downloadCounts).some(([key,value])=>value>Number(incoming[key]||0));
+ if(driveBehind)await persistDriveStats();
  statsStorage.ready=true;statsStorage.error=null;statsStorage.lastSaved=result.updatedAt||null;saveDownloads();console.log('Restored Google Drive download counts:',Object.keys(downloadCounts).length);
  }catch(e){statsStorage.error=e.message;console.error('Google Drive statistics restore failed:',e.message)}
 }
@@ -67,7 +71,11 @@ async function children(id){
 }
 async function sync(){
  if(syncing)return false;syncing=true;syncStartedAt=new Date().toISOString();const rows=[],failures=[],seen=new Set(),stats=Object.fromEntries(roots.map(x=>[x.name,{files:0,folders:0,errors:0}]));let count=0;
- try{const queue=roots.map(root=>({id:root.id,source:root.name,path:[]}));while(queue.length){
+ try{
+ // Every catalogue sync also refreshes download statistics from their persistent Drive backup.
+ // Serialise with download writes to prevent overwriting a freshly incremented count.
+ if(process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID){writeQueue=writeQueue.catch(()=>{}).then(()=>restoreDriveStats());await writeQueue;}
+ const queue=roots.map(root=>({id:root.id,source:root.name,path:[]}));while(queue.length){
  const batch=queue.splice(0,scanConcurrency);await Promise.all(batch.map(async task=>{if(seen.has(task.source+':'+task.id))return;seen.add(task.source+':'+task.id);
  try{const files=await children(task.id);count++;stats[task.source].folders++;for(const file of files){
  if(file.mimeType==='application/vnd.google-apps.folder'){queue.push({id:file.id,source:task.source,path:[...task.path,file.name]});continue;}
