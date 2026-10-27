@@ -95,7 +95,31 @@ async function handler(req,res){
  if(sort==='name')list.sort((a,b)=>a.name.localeCompare(b.name));else if(sort==='oldest')list.sort((a,b)=>a.updated.localeCompare(b.updated));const total=list.length,duplicateCount=list.filter(x=>duplicateSet.has(x.id)).length;return json(res,{items:list.slice((page-1)*limit,page*limit).map(x=>({...x,isDuplicate:duplicateSet.has(x.id)})),total,duplicateCount,uniqueCount:total-duplicateCount,page,pages:Math.ceil(total/limit)||1});}
  if(u.pathname==='/api/sync'&&req.method==='POST'){if(!process.env.GOOGLE_DRIVE_ACCESS_TOKEN&&!process.env.GOOGLE_SERVICE_ACCOUNT_JSON&&!process.env.GOOGLE_SERVICE_ACCOUNT_FILE)return json(res,{error:'Google Drive credentials not configured'},503);const alreadyRunning=syncing;sync().catch(console.error);return json(res,{started:!alreadyRunning,alreadyRunning},alreadyRunning?200:202)}
  if(u.pathname.startsWith('/api/download/')){const id=u.pathname.slice('/api/download/'.length);const item=catalogue.find(x=>x.id===id);if(!item)return json(res,{error:'Not found'},404);const upstream=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true');const bytes=Buffer.from(await upstream.arrayBuffer());if(bytes.length>80*1024*1024)return json(res,{error:'File exceeds download limit; use Drive link'},413);const safe=item.name.replace(/[\\\"\r\n]/g,'_');res.writeHead(200,{'content-type':'application/octet-stream','content-disposition':'attachment; filename="'+safe+'"','content-length':bytes.length,'cache-control':'no-store'});return res.end(bytes);}
- if(u.pathname.startsWith('/api/image/')){const id=u.pathname.slice('/api/image/'.length);const item=catalogue.find(x=>x.id===id);if(!item||!item.preview)return json(res,{error:'Not found'},404);const upstream=await drive(item.thumbnail&&!/^image\//.test(item.mime)?item.thumbnail:'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true');const size=Number(upstream.headers.get('content-length')||0);if(size>15*1024*1024)return json(res,{error:'Image too large'},413);const data=Buffer.from(await upstream.arrayBuffer());if(data.length>15*1024*1024)return json(res,{error:'Image too large'},413);res.writeHead(200,{'content-type':item.thumbnail&&!/^image\//.test(item.mime)?'image/jpeg':item.mime,'cache-control':'private, max-age=900','x-content-type-options':'nosniff'});return res.end(data);}
+ if(u.pathname.startsWith('/api/image/')){
+  const id=u.pathname.slice('/api/image/'.length),item=catalogue.find(x=>x.id===id);
+  if(!item||!item.preview)return json(res,{error:'Preview unavailable'},404);
+  const media='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true';
+  const requestThumbnail=async()=>{
+   const metadata=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=thumbnailLink,mimeType&supportsAllDrives=true')).json();
+   const link=metadata.thumbnailLink||item.thumbnail;
+   if(!link)throw Error('No Drive thumbnail available');
+   const response=await fetch(link,{headers:{authorization:'Bearer '+await token()}});
+   if(!response.ok)throw Error('Thumbnail HTTP '+response.status);
+   return {bytes:Buffer.from(await response.arrayBuffer()),mime:response.headers.get('content-type')||'image/jpeg'};
+  };
+  let image=null;
+  try{
+    if(/^image\//.test(item.mime||'') && item.size<=12*1024*1024){
+      const response=await drive(media);
+      const bytes=Buffer.from(await response.arrayBuffer());
+      if(bytes.length<=15*1024*1024)image={bytes,mime:item.mime};
+    }
+  }catch(e){console.warn('Full image preview failed; trying thumbnail:',id,e.message)}
+  if(!image){try{image=await requestThumbnail()}catch(e){console.warn('Thumbnail unavailable:',id,e.message);return json(res,{error:'Cannot generate preview for this file',driveUrl:item.url},502)}}
+  if(image.bytes.length>15*1024*1024)return json(res,{error:'Preview exceeds size limit'},413);
+  res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':'private,max-age=300','x-content-type-options':'nosniff'});
+  return res.end(image.bytes);
+ }
  if(req.method!=='GET')return json(res,{error:'Method not allowed'},405);
  const name=u.pathname==='/'?'index.html':u.pathname.slice(1),root=path.join(__dirname,'public'),file=path.resolve(root,name);if(!file.startsWith(root+path.sep))return json(res,{error:'Forbidden'},403);if(!fs.existsSync(file)||!fs.statSync(file).isFile())return json(res,{error:'Not found'},404);
  res.writeHead(200,{'content-type':types[path.extname(file)]||'application/octet-stream','cache-control':name.endsWith('.css')?'public, max-age=300':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'"});res.end(fs.readFileSync(file));
