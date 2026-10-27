@@ -52,6 +52,8 @@ window.addEventListener('scroll',updateBackToTop,{passive:true});
 window.addEventListener('resize',updateBackToTop,{passive:true});
 updateBackToTop();
 $('viewShuffle').onclick=()=>{if(state.items.length<2){toast('Open a collection with more designs');return}for(let i=state.items.length-1;i>0;i--){const k=Math.floor(Math.random()*(i+1));[state.items[i],state.items[k]]=[state.items[k],state.items[i]]}render();toast('Shuffled the current page ✦')};
+$('focusMode').onclick=()=>{const next=!document.body.classList.contains('focus-mode');document.body.classList.toggle('focus-mode',next);$('focusMode').setAttribute('aria-pressed',String(next));$('focusMode').textContent=next?'▣ Exit focus':'◻ Focus';try{localStorage.setItem('weardhk-focus',String(next))}catch{};toast(next?'Focus mode enabled':'Focus mode disabled')};
+try{if(localStorage.getItem('weardhk-focus')==='true'){$('focusMode').click()}}catch{}
 $('surprise').onclick=()=>{if(!state.items.length){toast('No artwork loaded yet');return;}const random=state.items[Math.floor(Math.random()*state.items.length)];detail(random)};
 $('modalPrev').onclick=()=>stepPreview(-1);
 $('modalNext').onclick=()=>stepPreview(1);
@@ -62,7 +64,7 @@ $('viewGrid').onclick=()=>setGalleryView(false);
 $('viewCompact').onclick=()=>setGalleryView(true);
 function setGalleryView(compact){state.compact=compact;$('viewGrid').classList.toggle('active',!compact);$('viewCompact').classList.toggle('active',compact);render();try{localStorage.setItem('weardhk-compact',String(compact))}catch{}}
 try{setGalleryView(localStorage.getItem('weardhk-compact')==='true')}catch{}
-document.addEventListener('keydown',e=>{const inField=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);if(e.key==='/'&&!inField&&!$('preview').open){e.preventDefault();$('query').focus()}if(e.key==='Escape'&&document.activeElement===$('query'))$('query').blur();if($('preview').open&&!inField&&e.key==='ArrowRight'){e.preventDefault();stepPreview(1)}if($('preview').open&&!inField&&e.key==='ArrowLeft'){e.preventDefault();stepPreview(-1)}});
+document.addEventListener('keydown',e=>{const inField=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);if(e.key==='/'&&!inField&&!$('preview').open){e.preventDefault();$('query').focus()}if(e.key==='Escape'&&document.activeElement===$('query'))$('query').blur();if(e.key==='Escape'&&document.body.classList.contains('focus-mode')&&!$('preview').open)$('focusMode').click();if($('preview').open&&!inField&&e.key==='ArrowRight'){e.preventDefault();stepPreview(1)}if($('preview').open&&!inField&&e.key==='ArrowLeft'){e.preventDefault();stepPreview(-1)}});
 $('modalFavorite').onclick=()=>toggleFav(state.selected.id);
 $('close').onclick=()=>$('preview').close();
 $('preview').onclick=e=>{if(e.target===$('preview'))$('preview').close()};
