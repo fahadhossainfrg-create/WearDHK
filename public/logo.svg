@@ -1,9 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title>WearDHK logo</title>
-  <g fill="#c3fc71">
-    <path d="M5 28 13 23v17l8 5v9L5 45z"/>
-    <path d="M19 17 27 12v28l9 5v9L19 44z"/>
-    <path d="M35 21 43 16v24l9 5v9L35 44z"/>
-    <path d="M51 30 59 25v25l-8-5z"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="530 310 465 425" role="img" aria-labelledby="title">
+<title>WearDHK original navy monogram</title>
+<defs><linearGradient id="navy" x1="0" y1="0" x2="0.85" y2="1"><stop offset="0" stop-color="#111b2b"/><stop offset="0.56" stop-color="#142035"/><stop offset="1" stop-color="#0d1627"/></linearGradient></defs>
+<g fill="url(#navy)">
+<path d="M636 453 L560 497 L560 582 L637 617 Z"/>
+<path d="M756 341 L674 393 L674 552 L746 591 L746 669 L823 710 L824 590 L757 552 Z"/>
+<path d="M892 367 L811 419 L811 547 L886 582 L888 655 L966 696 L965 579 L893 543 Z"/>
+</g></svg>
