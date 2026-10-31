@@ -1,5 +1,5 @@
 'use strict';
-const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{Readable}=require('node:stream'),{pipeline}=require('node:stream/promises');
 const sharp=require('sharp');
 // Keep thumbnail generation within the 512 MiB Render instance.
 sharp.cache(false);
@@ -9,47 +9,10 @@ const roots=[
  {id:'1QImLRpunvmjkhHc8_CqewTw7u6lqvoLb',name:'Organised Library'},
  {id:'1MPdvOZSFs0uUwS3qYOzY9m5-_61DloDW',name:'New Designs'},
  {id:'1SpCQMhm_iu7kYEWG81xIbjJbh2FABdoc',name:'Plain Chapter'}];
-const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(5,Math.min(30,Number(process.env.SYNC_CONCURRENCY||20)));
-let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
+const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(4,Math.min(12,Number(process.env.SYNC_CONCURRENCY||8)));
+let catalogue=[],snapshotCount=0;try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort(),byId=new Map();for(const name of names){const rows=JSON.parse(fs.readFileSync(path.join(__dirname,name),'utf8'));if(Array.isArray(rows))for(const row of rows)if(row?.id)byId.set(row.id,row)}catalogue=Array.from(byId.values());snapshotCount=catalogue.length;console.log('Persistent catalogue files:',names.length,'unique designs:',snapshotCount)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
-const downloadsPath=path.join(__dirname,'download-counts.json');
-let downloadCounts={};try{const parsed=JSON.parse(fs.readFileSync(downloadsPath,'utf8'));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))downloadCounts=parsed}catch{}
-function saveDownloads(){try{const tmp=downloadsPath+'.tmp';fs.writeFileSync(tmp,JSON.stringify(downloadCounts));fs.renameSync(tmp,downloadsPath)}catch(e){console.warn('Download tracking is runtime-only:',e.message)}}
-function downloadTotal(){return Object.values(downloadCounts).reduce((total,n)=>total+(Number(n)||0),0)}
-let statsStorage={mode:process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID?'google-drive':'temporary',ready:false,error:null,lastSaved:null};
-let writeQueue=Promise.resolve();
-async function driveStatsCall(method,url,body){
- const response=await fetch(url,{method,headers:{authorization:'Bearer '+await token(),'content-type':'application/json'},...(body!==undefined?{body:JSON.stringify(body)}:{})});
- if(!response.ok)throw Error('Drive stats storage HTTP '+response.status+': '+(await response.text()).slice(0,160));
- return response.json();
-}
-async function restoreDriveStats(){
- const id=process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID;if(!id)return;
- try{const result=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media')).json();
- if(!result||typeof result.counts!=='object'||Array.isArray(result.counts))throw Error('Unexpected statistics backup format');
- const incoming=Object.fromEntries(Object.entries(result.counts).filter(([id,n])=>id&&Number.isSafeInteger(n)&&n>=0));
- // Never replace newer local increments with an older Drive snapshot.
- for(const [key,value] of Object.entries(incoming))downloadCounts[key]=Math.max(Number(downloadCounts[key]||0),value);
- const driveBehind=Object.entries(downloadCounts).some(([key,value])=>value>Number(incoming[key]||0));
- if(driveBehind)await persistDriveStats();
- statsStorage.ready=true;statsStorage.error=null;statsStorage.lastSaved=result.updatedAt||null;saveDownloads();console.log('Restored Google Drive download counts:',Object.keys(downloadCounts).length);
- }catch(e){statsStorage.error=e.message;console.error('Google Drive statistics restore failed:',e.message)}
-}
-async function persistDriveStats(){
- const id=process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID;if(!id)return;
- const body={version:1,updatedAt:new Date().toISOString(),counts:downloadCounts};
- const url='https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(id)+'?uploadType=media';
- const response=await fetch(url,{method:'PATCH',headers:{authorization:'Bearer '+await token(),'content-type':'application/json'},body:JSON.stringify(body)});
- if(!response.ok)throw Error('Drive backup HTTP '+response.status+': '+(await response.text()).slice(0,160));
- statsStorage.ready=true;statsStorage.error=null;statsStorage.lastSaved=body.updatedAt;
-}
-function persistStatsQueued(){
- if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID)return;
- writeQueue=writeQueue.then(()=>persistDriveStats()).catch(e=>{statsStorage.ready=false;statsStorage.error=e.message;console.error('Could not save download counts to Drive:',e.message)});
- return writeQueue;
-}
-
-let catalogue=snapshot.slice(),syncedAt=null,errors=[],scannedFolders=0,syncing=false,syncStartedAt=null,sourceStats={};
+let syncedAt=null,errors=[],scannedFolders=0,syncing=false,syncStartedAt=null,sourceStats={};
 const encode=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
 const isArabicDesign=name=>{const value=String(name||'');return !/(bangla|bengali)/i.test(value)&&/(?:^|[^a-z])(arabic|kufic|calligraphy|islamic|allah|quran|surah|bismillah|alhamdulillah|tawhid|taqwa|shukr|iman|barakah|noor|sabr|ayat|hadith|masjid|adil|istiqamah|qalb|hasbunallah|sami_allahu)(?:[^a-z]|$)/i.test(value)};
 let tokenCache={token:'',expiry:0};
@@ -59,7 +22,7 @@ async function token(){
  const raw=process.env.GOOGLE_SERVICE_ACCOUNT_JSON||(process.env.GOOGLE_SERVICE_ACCOUNT_FILE?fs.readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT_FILE,'utf8'):null);
  if(!raw)throw Error('Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE and share the configured folders with its service-account email.');
  const sa=JSON.parse(raw),now=Math.floor(Date.now()/1000);
- const signed=encode({alg:'RS256',typ:'JWT'})+'.'+encode({iss:sa.client_email,scope:process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID?'https://www.googleapis.com/auth/drive':'https://www.googleapis.com/auth/drive.readonly',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600});
+ const signed=encode({alg:'RS256',typ:'JWT'})+'.'+encode({iss:sa.client_email,scope:'https://www.googleapis.com/auth/drive.readonly',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600});
  const signature=crypto.sign('RSA-SHA256',Buffer.from(signed),sa.private_key).toString('base64url');
  const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion:signed+'.'+signature})});
  const x=await r.json();if(!r.ok)throw Error('Google token request failed: '+(x.error_description||x.error));
@@ -84,7 +47,7 @@ async function children(id){
  const data=await(await drive(u)).json();found.push(...(data.files||[]));next=data.nextPageToken||'';}while(next);return found;
 }
 const thumbnailFiles=new Map(),thumbnailRetry=new Map(),persistedThumbnailIds=new Set(),queuedThumbnailIds=new Set();
-const MAX_THUMBNAILS_IN_MEMORY=12,MAX_PREVIEWS_IN_MEMORY=20;
+const MAX_THUMBNAILS_IN_MEMORY=12,MAX_PREVIEWS_IN_MEMORY=8;
 function cacheThumbnail(id,value){
  if(thumbnailFiles.has(id))thumbnailFiles.delete(id);
  thumbnailFiles.set(id,value);
@@ -109,8 +72,8 @@ function scheduleThumbnailPreparation(rows,previousIds){
  const candidates=rows.filter(item=>(/^image\/(png|jpeg|webp)$/i.test(item.mime||'')&&Number(item.size||0)<=10*1024*1024)||/\.(ai|eps|pdf)$/i.test(item.name||''));
  const fresh=[],backfill=[],now=Date.now();
  for(const item of candidates){if(persistedThumbnailIds.has(item.id)||queuedThumbnailIds.has(item.id)||(thumbnailRetry.get(item.id)||0)>now)continue;queuedThumbnailIds.add(item.id);(previousIds.has(item.id)?backfill:fresh).push(item);}
- const byPopularity=(a,b)=>(Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0))||a.name.localeCompare(b.name);
- fresh.sort(byPopularity);backfill.sort(byPopularity);
+ const byName=(a,b)=>a.name.localeCompare(b.name);
+ fresh.sort(byName);backfill.sort(byName);
  const all=[...fresh,...thumbnailPreparationQueue,...backfill];thumbnailPreparationQueue=all.slice(0,8);const chosen=new Set(thumbnailPreparationQueue.map(x=>x.id));for(const item of all)if(!chosen.has(item.id))queuedThumbnailIds.delete(item.id);
  void drainThumbnailQueue();
 }
@@ -142,24 +105,21 @@ async function getOrCreateThumbnail(item){
 async function sync(){
  if(syncing)return false;syncing=true;syncStartedAt=new Date().toISOString();const rows=[],failures=[],seen=new Set(),stats=Object.fromEntries(roots.map(x=>[x.name,{files:0,folders:0,errors:0}]));let count=0;
  try{
- // Every catalogue sync also refreshes download statistics from their persistent Drive backup.
- // Serialise with download writes to prevent overwriting a freshly incremented count.
- if(process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID){writeQueue=writeQueue.catch(()=>{}).then(()=>restoreDriveStats());await writeQueue;}
  const queue=roots.map(root=>({id:root.id,source:root.name,path:[]}));while(queue.length){
  const batch=queue.splice(0,scanConcurrency);await Promise.all(batch.map(async task=>{if(seen.has(task.source+':'+task.id))return;seen.add(task.source+':'+task.id);
  try{const files=await children(task.id);count++;stats[task.source].folders++;for(const file of files){
  if(file.mimeType==='application/vnd.google-apps.folder'){queue.push({id:file.id,source:task.source,path:[...task.path,file.name]});continue;}
  if(!(/^image\//.test(file.mimeType||'')||/\.(ai|eps|svg|pdf|psd|webp|png|jpe?g|avif|tiff?)$/i.test(file.name)))continue;
- stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink||/\.ai$/i.test(file.name),thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
+ stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink||/\.(ai|eps|pdf)$/i.test(file.name),thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
  }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));scannedFolders=count;sourceStats=stats;}
- if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
+ if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));duplicateCache=null;snapshotCount=0;syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
  if(process.env.GOOGLE_THUMBNAILS_FOLDER_ID){await refreshThumbnailIndex();scheduleThumbnailPreparation(rows,previousIds);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
  errors=failures;scannedFolders=count;sourceStats=stats;
  }catch(e){errors=[e.message]}finally{syncing=false;}
  return !errors.length;
 }
 function isExplicitDuplicate(x){return !!x.confirmedDuplicate||/^_?Confirmed Duplicates\b/i.test(x.category||'')||/(^| \/ )_?Confirmed Duplicates\b/i.test(x.folder||'')}
-function duplicateIds(){const hashes=new Map(),dupes=new Set();for(const x of catalogue){if(isExplicitDuplicate(x))dupes.add(x.id);if(!x.checksum)continue;const key=x.checksum+':'+x.size;if(!hashes.has(key))hashes.set(key,[]);hashes.get(key).push(x)}for(const group of hashes.values()){if(group.length<2)continue;group.sort((a,b)=>Number(isExplicitDuplicate(a))-Number(isExplicitDuplicate(b))||a.updated.localeCompare(b.updated)||a.id.localeCompare(b.id));const canonical=group.find(x=>!isExplicitDuplicate(x));for(const x of group)if(!canonical||x.id!==canonical.id)dupes.add(x.id)}return dupes}
+let duplicateCache=null;function duplicateIds(){if(duplicateCache)return duplicateCache;const hashes=new Map(),dupes=new Set();for(const x of catalogue){if(isExplicitDuplicate(x))dupes.add(x.id);if(!x.checksum)continue;const key=x.checksum+':'+x.size;if(!hashes.has(key))hashes.set(key,[]);hashes.get(key).push(x)}for(const group of hashes.values()){if(group.length<2)continue;group.sort((a,b)=>Number(isExplicitDuplicate(a))-Number(isExplicitDuplicate(b))||a.updated.localeCompare(b.updated)||a.id.localeCompare(b.id));const canonical=group.find(x=>!isExplicitDuplicate(x));for(const x of group)if(!canonical||x.id!==canonical.id)dupes.add(x.id)}duplicateCache=dupes;return duplicateCache}
 function json(res,obj,status=200){res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(obj))}
 const SESSION_COOKIE='weardhk_session';
 function loginHtml(message=''){
@@ -218,17 +178,14 @@ async function handler(req,res){
  }
  if(!requireSession(req,res,u))return;
  try{
- if(u.pathname==='/api/status')return json(res,{thumbnailStatus:{saved:persistedThumbnailIds.size,queued:thumbnailPreparationQueue.length,processing:thumbnailPreparationRunning,backgroundEnabled:process.env.ENABLE_BACKGROUND_THUMBNAILS!=='false',memoryMB:Math.round(process.memoryUsage().rss/1048576),memoryLimitMB:512},duplicates:duplicateIds().size,count:catalogue.length,syncedAt,errors:errors.slice(0,15),scannedFolders,sourceStats,snapshotCount:snapshot.length,usingSnapshot:!syncedAt,complete:!!syncedAt&&!errors.length,syncing,syncStartedAt,statsStorage,connected:!!(process.env.GOOGLE_DRIVE_ACCESS_TOKEN||process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE),roots,interval});
- if(u.pathname==='/api/download-backup'){const payload={schema:'weardhk-download-counts-v1',exportedAt:new Date().toISOString(),countedDownloads:downloadTotal(),note:'Counts only downloads through WearDHK, while current Render instance data remains available.',designs:catalogue.map(x=>({id:x.id,name:x.name,source:x.source,category:x.category,downloads:Number(downloadCounts[x.id]||0)}))};const ext=u.searchParams.get('format')==='csv'?'csv':'json';let body,type;if(ext==='csv'){const esc=v=>'"'+String(v??'').replace(/"/g,'""')+'"';body=['file_id,name,source,category,downloads',...payload.designs.map(x=>[x.id,x.name,x.source,x.category,x.downloads].map(esc).join(','))].join('\n');type='text/csv; charset=utf-8'}else{body=JSON.stringify(payload,null,2);type='application/json; charset=utf-8'}res.writeHead(200,{'content-type':type,'content-disposition':'attachment; filename="weardhk-download-backup-'+new Date().toISOString().slice(0,10)+'.'+ext+'"','cache-control':'no-store','x-content-type-options':'nosniff'});return res.end(body)}
- if(u.pathname==='/api/download-stats'){const ranked=catalogue.map(x=>({id:x.id,name:x.name,source:x.source,category:x.category,count:Number(downloadCounts[x.id]||0)})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count).slice(0,20);return json(res,{total:downloadTotal(),trackedDesigns:Object.keys(downloadCounts).length,top:ranked,persistent:statsStorage.ready,scope:'Counts include both direct downloads and Open in Drive clicks through WearDHK. Opening Drive does not confirm a file was downloaded.'})}
+ if(u.pathname==='/api/status')return json(res,{thumbnailStatus:{saved:persistedThumbnailIds.size,queued:thumbnailPreparationQueue.length,processing:thumbnailPreparationRunning,backgroundEnabled:process.env.ENABLE_BACKGROUND_THUMBNAILS!=='false',memoryMB:Math.round(process.memoryUsage().rss/1048576),memoryLimitMB:512},duplicates:duplicateIds().size,count:catalogue.length,syncedAt,errors:errors.slice(0,15),scannedFolders,sourceStats,snapshotCount,usingSnapshot:!syncedAt&&snapshotCount>0,complete:!!syncedAt&&!errors.length,syncing,syncStartedAt,connected:!!(process.env.GOOGLE_DRIVE_ACCESS_TOKEN||process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE),roots,interval});
  if(u.pathname==='/api/categories'){const duplicateSet=duplicateIds(),view=u.searchParams.get('view')||'all',map=new Map();for(const x of catalogue){if(view==='duplicates'?!duplicateSet.has(x.id):duplicateSet.has(x.id))continue;for(const [source,name] of [[x.source,x.category],...(isArabicDesign(x.name)?[['Arabic Designs','Arabic Designs']]:[])]){const key=source+'|||'+name;map.set(key,(map.get(key)||0)+1);}}return json(res,{categories:[...map].map(([k,count])=>({source:k.split('|||')[0],name:k.split('|||')[1],count})).sort((a,b)=>b.count-a.count)})}
  if(u.pathname==='/api/designs'){const q=(u.searchParams.get('q')||'').toLowerCase(),normalizeSearch=value=>String(value||'').toLowerCase().replace(/[_-]+/g,' ').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim(),normalizedQ=normalizeSearch(q),source=u.searchParams.get('source')||'All',cat=u.searchParams.get('category')||'All',sort=u.searchParams.get('sort')||'newest';const view=u.searchParams.get('view')||'all',duplicateSet=duplicateIds();const limit=Math.max(1,Math.min(120,Number(u.searchParams.get('limit')||48))),page=Math.max(1,Number(u.searchParams.get('page')||1));
- let list=catalogue.filter(x=>(view==='top20'?true:view==='favorites'?(u.searchParams.get('ids')||'').split(',').includes(x.id):(view==='duplicates'?duplicateSet.has(x.id):!duplicateSet.has(x.id)))&&(source==='All'||(source==='Arabic Designs'?isArabicDesign(x.name):x.source===source))&&(cat==='All'||(cat==='Arabic Designs'?isArabicDesign(x.name):x.category===cat))&&(!normalizedQ||normalizeSearch(x.name+' '+x.source+' '+x.category+' '+x.folder+' '+x.description+(isArabicDesign(x.name)?' Arabic Designs':'')).includes(normalizedQ)));
- if(view==='top20')list=list.filter(x=>Number(downloadCounts[x.id]||0)>0).sort((a,b)=>Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0)||a.name.localeCompare(b.name)).slice(0,20);
- if(sort==='popular')list.sort((a,b)=>(Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0))||b.updated.localeCompare(a.updated));else if(sort==='name')list.sort((a,b)=>a.name.localeCompare(b.name));else if(sort==='oldest')list.sort((a,b)=>a.updated.localeCompare(b.updated));const total=list.length,duplicateCount=list.filter(x=>duplicateSet.has(x.id)).length;return json(res,{items:list.slice((page-1)*limit,page*limit).map(x=>({...x,downloads:Number(downloadCounts[x.id]||0),isDuplicate:duplicateSet.has(x.id)})),total,duplicateCount,uniqueCount:total-duplicateCount,page,pages:Math.ceil(total/limit)||1});}
+ let list=catalogue.filter(x=>(view==='favorites'?(u.searchParams.get('ids')||'').split(',').includes(x.id):(view==='duplicates'?duplicateSet.has(x.id):!duplicateSet.has(x.id)))&&(source==='All'||(source==='Arabic Designs'?isArabicDesign(x.name):x.source===source))&&(cat==='All'||(cat==='Arabic Designs'?isArabicDesign(x.name):x.category===cat))&&(!normalizedQ||normalizeSearch(x.name+' '+x.source+' '+x.category+' '+x.folder+' '+x.description+(isArabicDesign(x.name)?' Arabic Designs':'')).includes(normalizedQ)));
+ if(sort==='name')list.sort((a,b)=>a.name.localeCompare(b.name));else if(sort==='oldest')list.sort((a,b)=>a.updated.localeCompare(b.updated));const total=list.length,duplicateCount=list.filter(x=>duplicateSet.has(x.id)).length;return json(res,{items:list.slice((page-1)*limit,page*limit).map(x=>({...x,isDuplicate:duplicateSet.has(x.id)})),total,duplicateCount,uniqueCount:total-duplicateCount,page,pages:Math.ceil(total/limit)||1});}
  if(u.pathname==='/api/sync'&&req.method==='POST'){if(!process.env.GOOGLE_DRIVE_ACCESS_TOKEN&&!process.env.GOOGLE_SERVICE_ACCOUNT_JSON&&!process.env.GOOGLE_SERVICE_ACCOUNT_FILE)return json(res,{error:'Google Drive credentials not configured'},503);const alreadyRunning=syncing;sync().catch(console.error);return json(res,{started:!alreadyRunning,alreadyRunning},alreadyRunning?200:202)}
- if(u.pathname.startsWith('/api/open/')){const id=decodeURIComponent(u.pathname.slice('/api/open/'.length));const item=catalogue.find(x=>x.id===id);if(!item)return json(res,{error:'Not found'},404);downloadCounts[id]=Number(downloadCounts[id]||0)+1;saveDownloads();await persistStatsQueued();res.writeHead(302,{'location':item.url,'cache-control':'no-store','referrer-policy':'no-referrer'});return res.end()}
- if(u.pathname.startsWith('/api/download/')){const id=u.pathname.slice('/api/download/'.length);const item=catalogue.find(x=>x.id===id);if(!item)return json(res,{error:'Not found'},404);const upstream=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true');const bytes=Buffer.from(await upstream.arrayBuffer());if(bytes.length>80*1024*1024)return json(res,{error:'File exceeds download limit; use Drive link'},413);const extension=path.extname(item.name||'').toLowerCase();const mimeByExtension={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf','.ai':'application/postscript','.eps':'application/postscript','.psd':'image/vnd.adobe.photoshop','.avif':'image/avif','.tif':'image/tiff','.tiff':'image/tiff'};const safe=String(item.name||('design-'+id)).replace(/[\\\"\r\n]/g,'_');const encoded=encodeURIComponent(safe);res.writeHead(200,{'content-type':mimeByExtension[extension]||item.mime||'application/octet-stream','content-disposition':'attachment; filename="'+safe.replace(/[^\x20-\x7e]/g,'_')+'"; filename*=UTF-8\x27\x27'+encoded,'content-length':bytes.length,'cache-control':'no-store','x-content-type-options':'nosniff'});downloadCounts[id]=Number(downloadCounts[id]||0)+1;saveDownloads();await persistStatsQueued();return res.end(bytes);}
+ if(u.pathname.startsWith('/api/open/')){const id=decodeURIComponent(u.pathname.slice('/api/open/'.length));const item=catalogue.find(x=>x.id===id);if(!item)return json(res,{error:'Not found'},404);res.writeHead(302,{'location':item.url,'cache-control':'no-store','referrer-policy':'no-referrer'});return res.end()}
+ if(u.pathname.startsWith('/api/download/')){const id=u.pathname.slice('/api/download/'.length);const item=catalogue.find(x=>x.id===id);if(!item)return json(res,{error:'Not found'},404);const upstream=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true');const size=Number(item.size||upstream.headers.get('content-length')||0);if(size>80*1024*1024){upstream.body?.cancel();return json(res,{error:'File exceeds download limit; use Drive link'},413)}const extension=path.extname(item.name||'').toLowerCase();const mimeByExtension={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf','.ai':'application/postscript','.eps':'application/postscript','.psd':'image/vnd.adobe.photoshop','.avif':'image/avif','.tif':'image/tiff','.tiff':'image/tiff'};const safe=String(item.name||('design-'+id)).replace(/[\\\"\r\n]/g,'_');const encoded=encodeURIComponent(safe);res.writeHead(200,{'content-type':mimeByExtension[extension]||item.mime||'application/octet-stream','content-disposition':'attachment; filename="'+safe.replace(/[^\x20-\x7e]/g,'_')+'"; filename*=UTF-8\x27\x27'+encoded,...(size?{'content-length':size}:{}),'cache-control':'no-store','x-content-type-options':'nosniff'});if(upstream.body)await pipeline(Readable.fromWeb(upstream.body),res);else res.end();return;}
  if(u.pathname.startsWith('/api/image/')){
   const id=u.pathname.slice('/api/image/'.length),item=catalogue.find(x=>x.id===id);
   if(!item||!item.preview)return json(res,{error:'Preview unavailable'},404);
@@ -261,7 +218,7 @@ async function handler(req,res){
  if(req.method!=='GET')return json(res,{error:'Method not allowed'},405);
  const name=u.pathname==='/'?'index.html':u.pathname.slice(1),root=path.join(__dirname,'public'),file=path.resolve(root,name);if(!file.startsWith(root+path.sep))return json(res,{error:'Forbidden'},403);if(!fs.existsSync(file)||!fs.statSync(file).isFile())return json(res,{error:'Not found'},404);
  res.writeHead(200,{'content-type':types[path.extname(file)]||'application/octet-stream','cache-control':name.endsWith('.css')?'public, max-age=300':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'"});res.end(fs.readFileSync(file));
- }catch(e){console.error(e);return json(res,{error:e.message},500)}
+ }catch(e){console.error(e);if(res.headersSent)return res.destroy(e);return json(res,{error:e.message},500)}
 }
-http.createServer((req,res)=>handler(req,res).catch(console.error)).listen(port,()=>{console.log('WearDHK Design Hub on port '+port+'; saved catalogue: '+catalogue.length+' designs');if(process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE||process.env.GOOGLE_DRIVE_ACCESS_TOKEN)restoreDriveStats().then(()=>sync()).catch(console.error)});
+http.createServer((req,res)=>handler(req,res).catch(console.error)).listen(port,()=>{console.log('WearDHK Design Hub on port '+port+'; saved catalogue: '+catalogue.length+' designs');if(process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE||process.env.GOOGLE_DRIVE_ACCESS_TOKEN)sync().catch(console.error)});
 setInterval(()=>sync().catch(console.error),interval*60000).unref();
