@@ -14,3 +14,21 @@ html[data-theme="dark"] :is(.source.selected,.chip.active){background:#355a6c!im
 html[data-theme="dark"] .main :is(.surprise,.surprise-btn,#surprise,.btn-surprise){background:#315467!important;color:#f1f8fa!important;border-color:#7092a1!important;opacity:1!important}
 html[data-theme="dark"] .main :is(.hero-card,.feature-card,.intro-card){color:#ecf6fb}
 @media(max-width:700px){.main button{min-width:0}.main .stats{min-width:0}.sidebar .brand strong{font-size:clamp(17px,5vw,24px)}}
+
+/* Unified surfaces and touch targets, avoiding white-on-white elements */
+html[data-theme="dark"] .main :is(.primary,.secondary,.chip,.view-btn,.stat,.tile,.toolbar,.pager,.modal-actions button){opacity:1!important}
+html[data-theme="dark"] .main .view-switch{background:#263d49!important;border-color:#597484!important}
+html[data-theme="dark"] .main .view-btn.active{background:#467187!important;color:#fff!important}
+html[data-theme="dark"] .main :is(.hero-card,.feature-card,.intro-card){background:#223b48!important;border-color:#4e6a79!important}
+html[data-theme="dark"] .main :is(.hero-card,.feature-card,.intro-card) :is(h1,h2,h3,p,small,strong,span){color:#f0f6fa!important;opacity:1!important}
+html[data-theme="dark"] .main :is(.stats .stat,.tile,.tile-info) :is(p,small,strong,span){color:#e3f0f5!important;opacity:1!important}
+html[data-theme="dark"] .main :is(.secondary,.chip,.view-btn,.primary){text-shadow:none!important}
+html[data-theme="light"] .main :is(button,.primary,.secondary,.chip,.view-btn){opacity:1!important}
+html[data-theme="light"] .main :is(.stat,.tile,.tile-info,.view-switch,.toolbar){color:#243741!important}
+html[data-theme="light"] .main :is(.stat strong,.stat small,.tile strong,.tile small){color:#243741!important;opacity:1!important}
+html[data-theme="light"] .main :is(.surprise,.surprise-btn,#surprise,.btn-surprise){color:#203742!important;background:#fff!important;border:1px solid #cad6d9!important;opacity:1!important}
+.shell,.main,.sidebar,.stats,.tile,.toolbar,.modal-info{min-width:0}
+.main :is(button,input,select,.chip){max-width:100%;box-sizing:border-box}
+.main button{min-height:38px}
+.stats .stat,.tile{overflow-wrap:anywhere;min-width:0}
+@media(max-width:700px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.stat{padding:13px!important}.stat strong{font-size:clamp(24px,7vw,34px)!important}.main .secondary,.main .primary{white-space:normal!important;overflow-wrap:anywhere}.main .toolbar{max-width:100%;min-width:0}}
