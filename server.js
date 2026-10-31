@@ -89,8 +89,8 @@ async function createDriveThumbnail(item){
  const metadata={name:item.id+'.webp',mimeType:'image/webp',parents:[folder],appProperties:{wearDhkSourceId:item.id}};
  const form=new FormData();form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));form.append('file',new Blob([bytes],{type:'image/webp'}),metadata.name);
  const response=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,mimeType',{method:'POST',headers:{authorization:'Bearer '+await token()},body:form});
- if(!response.ok)throw Error('Thumbnail upload failed ('+response.status+'): '+(await response.text()).slice(0,180));
- const saved=await response.json();return {bytes,mime:'image/webp',driveThumbnailId:saved.id};
+ if(!response.ok){const detail=(await response.text()).slice(0,180);console.warn('Thumbnail generated but Drive storage is unavailable; keeping preview in memory:',item.id,response.status,detail);return {bytes,mime:'image/webp',driveThumbnailId:null,stored:false};}
+ const saved=await response.json();return {bytes,mime:'image/webp',driveThumbnailId:saved.id,stored:true};
 }
 async function getOrCreateThumbnail(item){
  if(thumbnailFiles.has(item.id))return thumbnailFiles.get(item.id);
@@ -112,7 +112,7 @@ async function sync(){
  }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));scannedFolders=count;sourceStats=stats;}
  if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
  const isThumbnailCandidate=item=>/^image\//.test(item.mime||'')||/\.(ai|eps|pdf)$/i.test(item.name||'');const now=Date.now();const newlyAdded=rows.filter(item=>isThumbnailCandidate(item)&&(!previousIds.has(item.id)||((thumbnailRetry.get(item.id)||0)>0&&(thumbnailRetry.get(item.id)||0)<=now)));
- if(newlyAdded.length&&process.env.GOOGLE_THUMBNAILS_FOLDER_ID){(async()=>{for(const item of newlyAdded){try{await getOrCreateThumbnail(item);thumbnailRetry.delete(item.id);console.log('Created Drive thumbnail for design:',item.name)}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}}})().catch(console.error);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
+ if(newlyAdded.length&&process.env.GOOGLE_THUMBNAILS_FOLDER_ID){(async()=>{for(const item of newlyAdded){try{await getOrCreateThumbnail(item);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}}})().catch(console.error);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
  errors=failures;scannedFolders=count;sourceStats=stats;
  }catch(e){errors=[e.message]}finally{syncing=false;}
  return !errors.length;
