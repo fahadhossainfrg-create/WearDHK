@@ -7,6 +7,7 @@ const roots=[
  {id:'1SpCQMhm_iu7kYEWG81xIbjJbh2FABdoc',name:'Plain Chapter'}];
 const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(5,Math.min(30,Number(process.env.SYNC_CONCURRENCY||20)));
 let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
+const previewCache=new Map();
 const downloadsPath=path.join(__dirname,'download-counts.json');
 let downloadCounts={};try{const parsed=JSON.parse(fs.readFileSync(downloadsPath,'utf8'));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))downloadCounts=parsed}catch{}
 function saveDownloads(){try{const tmp=downloadsPath+'.tmp';fs.writeFileSync(tmp,JSON.stringify(downloadCounts));fs.renameSync(tmp,downloadsPath)}catch(e){console.warn('Download tracking is runtime-only:',e.message)}}
@@ -146,14 +147,16 @@ async function handler(req,res){
   const media='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true';
   const requestThumbnail=async()=>{
    const metadata=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=thumbnailLink,mimeType&supportsAllDrives=true')).json();
-   const link=metadata.thumbnailLink||item.thumbnail;
+   const link=item.thumbnail||metadata.thumbnailLink;
    if(!link)throw Error('No Drive thumbnail available');
    const response=await fetch(link,{headers:{authorization:'Bearer '+await token()}});
    if(!response.ok)throw Error('Thumbnail HTTP '+response.status);
    return {bytes:Buffer.from(await response.arrayBuffer()),mime:response.headers.get('content-type')||'image/jpeg'};
   };
-  let image=null;
-  try{
+  const thumbOnly=u.searchParams.get('thumb')==='1',cacheKey=id+(thumbOnly?':thumb':':full');
+  const cached=previewCache.get(cacheKey);let image=cached&&cached.expires>Date.now()?cached.image:null;
+  if(!image&&thumbOnly){try{image=await requestThumbnail()}catch(e){console.warn('Quick thumbnail unavailable; trying original:',id,e.message)}}
+  if(!image)try{
     if(/^image\//.test(item.mime||'') && item.size<=12*1024*1024){
       const response=await drive(media);
       const bytes=Buffer.from(await response.arrayBuffer());
@@ -162,7 +165,8 @@ async function handler(req,res){
   }catch(e){console.warn('Full image preview failed; trying thumbnail:',id,e.message)}
   if(!image){try{image=await requestThumbnail()}catch(e){console.warn('Thumbnail unavailable:',id,e.message);return json(res,{error:'Cannot generate preview for this file',driveUrl:item.url},502)}}
   if(image.bytes.length>15*1024*1024)return json(res,{error:'Preview exceeds size limit'},413);
-  res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':'private,max-age=300','x-content-type-options':'nosniff'});
+  if(image.bytes.length<=2*1024*1024){if(previewCache.size>=100)previewCache.delete(previewCache.keys().next().value);previewCache.set(cacheKey,{image,expires:Date.now()+10*60*1000})}
+  res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':'private,max-age=900','x-content-type-options':'nosniff'});
   return res.end(image.bytes);
  }
  if(req.method!=='GET')return json(res,{error:'Method not allowed'},405);
