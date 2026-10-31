@@ -1,0 +1,10 @@
+/* Simplified name-only search screen */
+.toolbar{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:0!important}
+.toolbar .search-shell{grid-column:1/-1!important;margin:0!important}
+.toolbar #category,.toolbar #format,.toolbar #sort,.toolbar #clearFilters,
+#activeFilters,.quick-filters,.wd-inline-label:has(select),#wd-newest,
+#wd-visual-candidates,#wd-check-candidates{display:none!important}
+.wd-search-feedback{margin:8px 2px 2px;font-size:12px;line-height:1.5;min-height:18px;color:#526b78}
+html[data-theme="dark"] .wd-search-feedback{color:#c3d7e1}
+.search-shell #wd-search-submit{min-width:82px!important}
+@media(max-width:650px){.toolbar{padding:10px!important}.search-shell{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important}}
