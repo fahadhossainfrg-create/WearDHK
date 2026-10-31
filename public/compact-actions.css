@@ -1,0 +1,6 @@
+/* Compact gallery quick actions on mobile and desktop */
+.wd-quick-actions{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:10px 0;padding:0;background:transparent!important}
+.wd-quick-actions #wd-newest,.wd-quick-actions #wd-select{flex:0 0 auto!important;width:auto!important;min-width:0!important;min-height:38px!important;padding:8px 11px!important;font-size:11px!important;font-weight:600!important;line-height:1.25!important;white-space:nowrap!important;border-radius:9px!important}
+.wd-quick-actions .wd-inline-label{flex:0 1 auto;min-width:0;font-size:11px}
+.wd-quick-actions .wd-inline-label select{min-height:38px;padding:7px 9px;font-size:11px;max-width:150px}
+@media(max-width:650px){.wd-quick-actions{gap:6px;align-items:center}.wd-quick-actions #wd-newest,.wd-quick-actions #wd-select{font-size:10px!important;padding:8px 9px!important;min-height:36px!important;max-width:calc(50vw - 24px)!important}.wd-quick-actions .wd-inline-label select{max-width:140px;min-height:36px;padding:6px}}
