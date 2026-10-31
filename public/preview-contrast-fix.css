@@ -1,0 +1,13 @@
+/* Preview detail cards: accessible in both colour schemes */
+html[data-theme="dark"] #preview .metadata-grid span,
+html[data-theme="dark"] #preview .metadata-grid>span,
+html[data-theme="dark"] .modal-info .metadata-grid span{background:#2b414e!important;border:1px solid #5a7888!important;color:#eff7fa!important}
+html[data-theme="dark"] #preview .metadata-grid :is(small,strong),
+html[data-theme="dark"] .modal-info .metadata-grid :is(small,strong){color:#f0f7fa!important;opacity:1!important;text-shadow:none!important}
+html[data-theme="dark"] #preview .metadata-grid small{color:#bfdae6!important}
+#preview .metadata-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0}
+#preview .metadata-grid span{min-width:0;overflow-wrap:anywhere}
+#preview .metadata-grid strong{white-space:normal;overflow-wrap:anywhere}
+#preview .wd-related button{min-height:44px;white-space:normal;overflow-wrap:anywhere;text-align:left}
+#preview .modal-info{min-width:0;overflow-wrap:anywhere}
+@media(max-width:650px){#preview .metadata-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#preview .metadata-grid span{padding:12px}#preview .modal-info{padding:18px 14px}}
