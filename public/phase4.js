@@ -21,26 +21,33 @@
  }
  document.addEventListener('click',()=>setTimeout(populate,70),true);
  $('preview')?.addEventListener('close',()=>{currentId=null});
- const otpPanel=document.createElement('div');otpPanel.className='wd-otp-panel';otpPanel.innerHTML='<p>Changing a design title requires a six-digit email code. The administrator receives the code; titles stay unchanged until confirmed.</p><button class="secondary" type="button" id="wd-send-title-otp">✉ Send verification code</button><input id="wd-title-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit email code" aria-label="Verification code"><button class="primary" type="button" id="wd-confirm-title">Confirm title change</button><p id="wd-title-feedback" role="status"></p>';
- panel.append(otpPanel);
+ const passwordPanel=document.createElement('div');passwordPanel.className='wd-otp-panel';
+ passwordPanel.innerHTML='<p>To change a design title, enter the administrator password. The title is saved only after server verification.</p><input type="password" id="wd-title-password" autocomplete="off" placeholder="Administrator password" aria-label="Title change password"><button class="primary" type="button" id="wd-confirm-title">Verify password & save title</button><p id="wd-title-feedback" role="status"></p>';
+ panel.append(passwordPanel);
  let verifiedTitles={};
  fetch('/api/verified-titles',{cache:'no-store'}).then(r=>r.json()).then(v=>{verifiedTitles=v.titles||{};if(currentId){currentId=null;populate()}}).catch(()=>{});
- async function titleRequest(endpoint,code){
-  if(!currentId)throw Error('Select a design first');
-  const title=$('wd-edit-title').value.trim();
-  if(title.length<2)throw Error('Enter a title with at least two characters');
-  const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:currentId,title,code})});
-  const data=await response.json();if(!response.ok)throw Error(data.error||'Verification unavailable');return data
- }
- $('wd-send-title-otp').onclick=async()=>{const feedback=$('wd-title-feedback');feedback.textContent='Sending…';try{await titleRequest('/api/title-otp/request');feedback.textContent='Code sent to administrator email. It expires in 10 minutes.'}catch(e){feedback.textContent=e.message}};
- $('wd-confirm-title').onclick=async()=>{const feedback=$('wd-title-feedback');try{const id=currentId;const result=await titleRequest('/api/title-otp/confirm',$('wd-title-code').value);verifiedTitles[id]=result.title;feedback.textContent='Title verified and saved on server.';$('modalTitle').textContent=result.title;toastSafe('Email verified: title saved')}catch(e){feedback.textContent=e.message}};
+ $('wd-confirm-title').onclick=async()=>{
+  const feedback=$('wd-title-feedback'),button=$('wd-confirm-title');
+  if(!currentId)return;
+  const title=$('wd-edit-title').value.trim(),password=$('wd-title-password').value;
+  if(title.length<2){feedback.textContent='Enter a title of at least two characters';return}
+  if(!password){feedback.textContent='Enter the administrator password';return}
+  button.disabled=true;feedback.textContent='Verifying…';
+  try{
+   const id=currentId;
+   const response=await fetch('/api/title-password/save',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,title,password})});
+   const data=await response.json();if(!response.ok)throw Error(data.error||'Unable to save title');
+   verifiedTitles[id]=data.title;feedback.textContent='Title saved successfully';$('modalTitle').textContent=data.title;toastSafe('Title changed');
+  }catch(e){feedback.textContent=e.message}
+  finally{$('wd-title-password').value='';button.disabled=false}
+ };
  $('wd-save-review').textContent='Save other metadata (not title)';
  $('wd-save-review').onclick=()=>{
   if(!currentId)return;
   data[currentId]={category:$('wd-edit-category').value.trim(),tags:$('wd-edit-tags').value.trim(),decision:$('wd-duplicate-decision').value};
-  persist();toastSafe('Other metadata saved locally. Title requires email OTP.');
+  persist();toastSafe('Other metadata saved locally. Title requires administrator password.');
  };
- $('wd-reset-review').onclick=()=>{if(!currentId)return;delete data[currentId];persist();currentId=null;populate();toastSafe('Local metadata cleared; verified title unchanged')};
+ $('wd-reset-review').onclick=()=>{if(!currentId)return;delete data[currentId];persist();currentId=null;populate();toastSafe('Local metadata cleared; saved title unchanged')};
  // Portable backup: supports transferring favourites and boards between devices without an account.
  const backup=document.createElement('div');backup.className='wd-personal-backup';
  backup.innerHTML='<button class="secondary" type="button" id="wd-export-personal">↓ Export personal data</button><label class="secondary" for="wd-import-personal">↑ Import personal data</label><input type="file" id="wd-import-personal" accept=".json,application/json" hidden>';
