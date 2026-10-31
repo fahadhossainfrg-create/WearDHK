@@ -29,3 +29,6 @@ button,select,input,textarea{font-family:inherit}
  #preview .modal-actions{gap:8px!important}
 }
 @media(max-width:360px){.wd-selection-bar{grid-template-columns:minmax(0,1fr)!important}}
+
+/* Protect against stale cached visual-comparison UI */
+#wd-visual-candidates{display:none!important}
