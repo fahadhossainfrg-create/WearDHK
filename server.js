@@ -62,6 +62,15 @@ async function token(){
  const x=await r.json();if(!r.ok)throw Error('Google token request failed: '+(x.error_description||x.error));
  tokenCache={token:x.access_token,expiry:Date.now()+(x.expires_in||3600)*1000};return tokenCache.token;
 }
+let oauthTokenCache={token:'',expiry:0};
+async function thumbnailUploadToken(){
+ const refresh=process.env.GOOGLE_OAUTH_REFRESH_TOKEN,clientId=process.env.GOOGLE_OAUTH_CLIENT_ID,clientSecret=process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+ if(!refresh||!clientId||!clientSecret)return token();
+ if(oauthTokenCache.token&&Date.now()<oauthTokenCache.expiry-60000)return oauthTokenCache.token;
+ const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,refresh_token:refresh,grant_type:'refresh_token'})});
+ const result=await response.json();if(!response.ok)throw Error('Google OAuth token refresh failed: '+(result.error_description||result.error));
+ oauthTokenCache={token:result.access_token,expiry:Date.now()+(result.expires_in||3600)*1000};return oauthTokenCache.token;
+}
 async function drive(url){
  let result;for(let i=0;i<4;i++){result=await fetch(url,{headers:{authorization:'Bearer '+await token()}});if(![429,500,502,503].includes(result.status))break;await new Promise(resolve=>setTimeout(resolve,400*(i+1)**2));}
  if(!result.ok)throw Error('Drive API '+result.status+': '+(await result.text()).slice(0,170));return result;
@@ -88,7 +97,7 @@ async function createDriveThumbnail(item){
  const bytes=await sharp(input,{limitInputPixels:50000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();
  const metadata={name:item.id+'.webp',mimeType:'image/webp',parents:[folder],appProperties:{wearDhkSourceId:item.id}};
  const form=new FormData();form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));form.append('file',new Blob([bytes],{type:'image/webp'}),metadata.name);
- const response=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,mimeType',{method:'POST',headers:{authorization:'Bearer '+await token()},body:form});
+ const response=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,mimeType',{method:'POST',headers:{authorization:'Bearer '+await thumbnailUploadToken()},body:form});
  if(!response.ok){const detail=(await response.text()).slice(0,180);console.warn('Thumbnail generated but Drive storage is unavailable; keeping preview in memory:',item.id,response.status,detail);return {bytes,mime:'image/webp',driveThumbnailId:null,stored:false};}
  const saved=await response.json();return {bytes,mime:'image/webp',driveThumbnailId:saved.id,stored:true};
 }
@@ -156,6 +165,24 @@ async function handler(req,res){
    res.writeHead(401,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"});return res.end(loginHtml(true));
   }
   res.writeHead(405,{'allow':'GET, POST'});return res.end();
+ }
+ if(u.pathname==='/oauth/google'&&req.method==='GET'){
+  const clientId=process.env.GOOGLE_OAUTH_CLIENT_ID,redirectUri=process.env.GOOGLE_OAUTH_REDIRECT_URI||'https://weardhk-design-hub.onrender.com/oauth/google/callback';
+  if(!clientId||!process.env.GOOGLE_OAUTH_CLIENT_SECRET)return json(res,{error:'Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in Render first.'},503);
+  const state=crypto.randomBytes(32).toString('hex'),params=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',scope:'https://www.googleapis.com/auth/drive',access_type:'offline',prompt:'consent',include_granted_scopes:'true',state});
+  res.writeHead(302,{'location':'https://accounts.google.com/o/oauth2/v2/auth?'+params.toString(),'set-cookie':'weardhk_oauth_state='+state+'; HttpOnly; Secure; SameSite=Lax; Path=/oauth/google; Max-Age=600','cache-control':'no-store'});return res.end();
+ }
+ if(u.pathname==='/oauth/google/callback'&&req.method==='GET'){
+  const cookies=Object.fromEntries((req.headers.cookie||'').split(';').map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf('=');return i<0?[x,'']:[x.slice(0,i),x.slice(i+1)]}));
+  const sent=u.searchParams.get('state')||'',saved=cookies.weardhk_oauth_state||'';
+  if(!sent||!saved||sent!==saved)return json(res,{error:'Google authorization state expired or did not match. Start again at /oauth/google.'},400);
+  const code=u.searchParams.get('code');if(!code)return json(res,{error:'Google did not return an authorization code.'},400);
+  const redirectUri=process.env.GOOGLE_OAUTH_REDIRECT_URI||'https://weardhk-design-hub.onrender.com/oauth/google/callback';
+  const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code,client_id:process.env.GOOGLE_OAUTH_CLIENT_ID||'',client_secret:process.env.GOOGLE_OAUTH_CLIENT_SECRET||'',redirect_uri:redirectUri,grant_type:'authorization_code'})});
+  const result=await response.json();res.setHeader('set-cookie','weardhk_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/oauth/google; Max-Age=0');
+  if(!response.ok||!result.refresh_token){res.writeHead(400,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"});return res.end('<!doctype html><meta charset="utf-8"><title>Google Drive connection</title><p>Google authorization did not return a refresh token. Check the OAuth client settings and try again with consent.</p>');}
+  const safe=result.refresh_token.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"});return res.end('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Google Drive connection</title><main style="max-width:720px;margin:40px auto;padding:24px;font:16px system-ui;color:#20323a"><h1>Google authorization complete</h1><p>Copy this refresh token and add it to the Render environment variable <strong>GOOGLE_OAUTH_REFRESH_TOKEN</strong>. Keep it private.</p><textarea readonly style="width:100%;height:110px;font:14px monospace" onclick="this.select()">'+safe+'</textarea><p>Then redeploy the WearDHK service. The site will use your Google account to store thumbnails in the configured Drive folder.</p></main>');
  }
  if(!requireSession(req,res,u))return;
  try{
