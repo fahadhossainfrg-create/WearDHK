@@ -16,3 +16,14 @@ Use a Node.js server host such as Render or Railway; GitHub Pages cannot run thi
 - https://drive.google.com/drive/folders/1MPdvOZSFs0uUwS3qYOzY9m5-_61DloDW
 
 The server accesses Drive in read-only mode; it never renames, uploads or deletes designs.
+
+## Verified design title edits
+
+Changing the catalogue display title requires a six-digit email OTP. Configure the following environment variables on the Render web service:
+
+- `TITLE_APPROVAL_EMAIL`: the administrator inbox that receives codes.
+- `OTP_FROM_EMAIL`: a verified sender address accepted by Resend.
+- `RESEND_API_KEY`: server-side Resend API key, never exposed to frontend code.
+- `OTP_SECRET`: a long random secret used to hash verification codes.
+
+Codes expire after ten minutes. Requests are limited per IP address and per design; only confirmed titles are applied. If these variables are missing, title changes are disabled (fail closed). The underlying Google Drive filename is not changed. Current verified titles are saved in `verified-titles.json` on the Render instance, **which is not durable across instance replacements unless backed by persistent storage**. Configure persistence before relying on edits long term.
