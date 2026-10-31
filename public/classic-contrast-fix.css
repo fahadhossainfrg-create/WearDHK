@@ -1,0 +1,16 @@
+
+/* Contrast patch for restored classic WearDHK, light/dark independent */
+html[data-theme="dark"] .sidebar .brand,html[data-theme="dark"] .sidebar .brand strong,html[data-theme="dark"] .sidebar .brand small{color:#f2f7fb!important}
+html[data-theme="dark"] .sidebar .brand .accent{color:#9bd5ec!important}
+html[data-theme="dark"] .main :is(h1,h2,h3,h4),html[data-theme="dark"] .main :is(.hero-title,.hero-title em,.hero-title span){color:#f0f7fa!important;opacity:1!important}
+html[data-theme="dark"] .main :is(.tagline,.subtitle,.hero-subtitle,.hero-description,.stat small,.stat strong,.stat span){color:#d1e2eb!important;opacity:1!important}
+html[data-theme="dark"] .main :is(.secondary,.chip,.view-btn,.source,button){color:#f0f7fa;border-color:#5b7787}
+html[data-theme="dark"] .main :is(.secondary,.chip,.view-btn){background:#294352!important;color:#f0f7fa!important}
+html[data-theme="dark"] .main .primary{background:#406f85!important;color:#fff!important}
+html[data-theme="dark"] .main .stats>.stat{background:#213540!important;border-color:#567382!important}
+html[data-theme="dark"] .main .stat :is(small,strong,span){color:#edf6fc!important;opacity:1!important;text-shadow:none!important}
+html[data-theme="dark"] .main .stat small{color:#c3d8e2!important}
+html[data-theme="dark"] :is(.source.selected,.chip.active){background:#355a6c!important;color:#fff!important}
+html[data-theme="dark"] .main :is(.surprise,.surprise-btn,#surprise,.btn-surprise){background:#315467!important;color:#f1f8fa!important;border-color:#7092a1!important;opacity:1!important}
+html[data-theme="dark"] .main :is(.hero-card,.feature-card,.intro-card){color:#ecf6fb}
+@media(max-width:700px){.main button{min-width:0}.main .stats{min-width:0}.sidebar .brand strong{font-size:clamp(17px,5vw,24px)}}
