@@ -103,6 +103,8 @@ async function drainThumbnailQueue(){
  finally{thumbnailPreparationRunning=false;if(thumbnailPreparationQueue.length)void drainThumbnailQueue();}
 }
 function scheduleThumbnailPreparation(rows,previousIds){
+ // Background conversions are opt-in on small instances to avoid OOM restarts.
+ if(process.env.ENABLE_BACKGROUND_THUMBNAILS!=='true')return;
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
  const candidates=rows.filter(item=>/^image\//.test(item.mime||'')||/\.(ai|eps|pdf)$/i.test(item.name||''));
  const fresh=[],backfill=[],now=Date.now();
