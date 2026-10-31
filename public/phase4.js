@@ -14,7 +14,7 @@
   if(!id||!$('preview')?.open)return;
   if(id===currentId)return;currentId=id;
   const record=data[id]||{};
-  $('wd-edit-title').value=record.title||'';
+  $('wd-edit-title').value=verifiedTitles[id]||'';
   $('wd-edit-category').value=record.category||'';
   $('wd-edit-tags').value=record.tags||'';
   $('wd-duplicate-decision').value=record.decision||'';
@@ -22,10 +22,9 @@
  document.addEventListener('click',()=>setTimeout(populate,70),true);
  $('preview')?.addEventListener('close',()=>{currentId=null});
  const otpPanel=document.createElement('div');otpPanel.className='wd-otp-panel';otpPanel.innerHTML='<p>Changing a design title requires a six-digit email code. The administrator receives the code; titles stay unchanged until confirmed.</p><button class="secondary" type="button" id="wd-send-title-otp">✉ Send verification code</button><input id="wd-title-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit email code" aria-label="Verification code"><button class="primary" type="button" id="wd-confirm-title">Confirm title change</button><p id="wd-title-feedback" role="status"></p>';
- $('wd-review-panel')?.append(otpPanel);
  panel.append(otpPanel);
  let verifiedTitles={};
- fetch('/api/verified-titles',{cache:'no-store'}).then(r=>r.json()).then(v=>{verifiedTitles=v.titles||{}}).catch(()=>{});
+ fetch('/api/verified-titles',{cache:'no-store'}).then(r=>r.json()).then(v=>{verifiedTitles=v.titles||{};if(currentId){currentId=null;populate()}}).catch(()=>{});
  async function titleRequest(endpoint,code){
   if(!currentId)throw Error('Select a design first');
   const title=$('wd-edit-title').value.trim();
@@ -34,7 +33,7 @@
   const data=await response.json();if(!response.ok)throw Error(data.error||'Verification unavailable');return data
  }
  $('wd-send-title-otp').onclick=async()=>{const feedback=$('wd-title-feedback');feedback.textContent='Sending…';try{await titleRequest('/api/title-otp/request');feedback.textContent='Code sent to administrator email. It expires in 10 minutes.'}catch(e){feedback.textContent=e.message}};
- $('wd-confirm-title').onclick=async()=>{const feedback=$('wd-title-feedback');try{const id=currentId;const result=await titleRequest('/api/title-otp/confirm',$('wd-title-code').value);verifiedTitles[id]=result.title;feedback.textContent='Title verified and saved on server.';toastSafe('Email verified: title saved')}catch(e){feedback.textContent=e.message}};
+ $('wd-confirm-title').onclick=async()=>{const feedback=$('wd-title-feedback');try{const id=currentId;const result=await titleRequest('/api/title-otp/confirm',$('wd-title-code').value);verifiedTitles[id]=result.title;feedback.textContent='Title verified and saved on server.';$('modalTitle').textContent=result.title;toastSafe('Email verified: title saved')}catch(e){feedback.textContent=e.message}};
  $('wd-save-review').textContent='Save other metadata (not title)';
  $('wd-save-review').onclick=()=>{
   if(!currentId)return;
