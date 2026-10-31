@@ -14,6 +14,7 @@ const portArgIndex=process.argv.indexOf('--port'),portArg=portArgIndex>=0?proces
 const port=Number(process.env.PORT||portArg||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(5,Math.min(30,Number(process.env.SYNC_CONCURRENCY||20)));
 let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
+let visualResult=null,visualScanRunning=false;
 const downloadsPath=path.join(__dirname,'download-counts.json');
 let downloadCounts={};try{const parsed=JSON.parse(fs.readFileSync(downloadsPath,'utf8'));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))downloadCounts=parsed}catch{}
 function saveDownloads(){try{const tmp=downloadsPath+'.tmp';fs.writeFileSync(tmp,JSON.stringify(downloadCounts));fs.renameSync(tmp,downloadsPath)}catch(e){console.warn('Download tracking is runtime-only:',e.message)}}
@@ -248,6 +249,10 @@ async function handler(req,res){
  if(u.pathname==='/api/suggestions'){const normalize=value=>String(value||'').toLowerCase().replace(/[_-]+/g,' ').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim(),q=normalize(u.searchParams.get('q')||'');if(q.length<2)return json(res,{items:[]});const items=catalogue.filter(x=>!duplicateIds().has(x.id)&&normalize(x.name+' '+x.category+' '+x.folder).includes(q)).sort((a,b)=>{const an=normalize(a.name),bn=normalize(b.name);return Number(bn.startsWith(q))-Number(an.startsWith(q))||Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0)||a.name.localeCompare(b.name)}).slice(0,8).map(x=>({id:x.id,name:x.name,category:x.category,mime:x.mime,size:x.size,updated:x.updated,preview:x.preview}));return json(res,{items})}
  if(u.pathname==='/api/categories'){const duplicateSet=duplicateIds(),view=u.searchParams.get('view')||'all',map=new Map();for(const x of catalogue){if(view==='duplicates'?!duplicateSet.has(x.id):duplicateSet.has(x.id))continue;for(const [source,name] of [[x.source,x.category],...(isArabicDesign(x.name)?[['Arabic Designs','Arabic Designs']]:[])]){const key=source+'|||'+name;map.set(key,(map.get(key)||0)+1);}}return json(res,{categories:[...map].map(([k,count])=>({source:k.split('|||')[0],name:k.split('|||')[1],count})).sort((a,b)=>b.count-a.count)})}
  if(u.pathname==='/api/visual-candidates'){
+  if(visualResult&&Date.now()-visualResult.at<600000)return json(res,visualResult.data);
+  if(visualScanRunning)return json(res,{error:'Visual scan in progress; retry shortly'},429);
+  visualScanRunning=true;
+  try{
   const candidates=catalogue.filter(x=>/^image\/(png|jpeg|webp)/i.test(x.mime||'')&&Number(x.size||0)>0&&Number(x.size)<8*1048576).slice(0,24);
   const hashes=[];
   for(const item of candidates){try{
@@ -258,7 +263,8 @@ async function handler(req,res){
    hashes.push({id:item.id,name:item.name,hash:bits});
   }catch(e){continue}}
   const groups=[];for(let i=0;i<hashes.length;i++)for(let j=i+1;j<hashes.length;j++){const a=hashes[i],b=hashes[j];let distance=0;for(let k=0;k<64;k++)if(a.hash[k]!==b.hash[k])distance++;if(distance<=7)groups.push({a:{id:a.id,name:a.name},b:{id:b.id,name:b.name},distance,confidence:'review-needed'});}
-  return json(res,{inspected:hashes.length,limit:24,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'});
+  const result={inspected:hashes.length,limit:24,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'};visualResult={at:Date.now(),data:result};return json(res,result);
+  }finally{visualScanRunning=false}
  }
  if(u.pathname==='/api/duplicate-candidates'){
   const groups=new Map(),exact=duplicateIds();const compact=v=>String(v||'').toLowerCase().replace(/\.(png|jpe?g|webp|ai|eps|svg|pdf|psd)$/,'').replace(/\b(copy|final|v\d+|duplicate|new|design|artwork|\d+)\b/g,' ').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim();
