@@ -1,0 +1,1 @@
+'use strict';try{const stored=localStorage.getItem('weardhk-theme');const mode=stored==='light'?'light':'dark';document.documentElement.dataset.theme=mode;document.documentElement.style.colorScheme=mode;document.documentElement.style.backgroundColor=mode==='dark'?'#111c24':'#f4f4f3'}catch(e){document.documentElement.dataset.theme='dark'}
