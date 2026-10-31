@@ -33,4 +33,4 @@
 .library-tabs .library-tab.active{color:#fff!important;border-bottom-color:#8bcde8!important}
 html:not([data-theme="dark"]) .library-tabs .library-tab{color:#526471!important}
 html:not([data-theme="dark"]) .library-tabs .library-tab.active{color:#1e3340!important;border-bottom-color:#3d6b80!important}
-@media(max-width:650px){.quickbar{grid-template-columns:minmax(0,1fr)!important;gap:6px!important}.view-switch{justify-self:end!important}.quick-filters{width:100%!important}.back-top{right:10px!important;bottom:calc(160px + env(safe-area-inset-bottom,0px))!important;width:38px!important;height:38px!important;opacity:.86!important}}
+@media(max-width:650px){.quickbar{grid-template-columns:minmax(0,1fr)!important;gap:6px!important}.view-switch{justify-self:end!important}.quick-filters{width:100%!important}.back-top{right:10px!important;bottom:calc(160px + env(safe-area-inset-bottom,0px))!important;width:38px!important;height:38px!important}}
