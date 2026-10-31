@@ -1,0 +1,11 @@
+/* Dark theme cards and accessible contrast correction */
+html[data-theme="dark"] :is(.stats,.stat,.stat-card,.stats-card,.stat-box,.hero-stat,.popular,.popular-section,.popular-card,.popular-panel,.leaderboard,.leader-card,.leader-row,.leader-preview,.leader-meta,.leader-list,.download-leaders,.feature-card,.section-card,.highlight-card,.insight-card,.dashboard-card,.trending-card,.top-design,.top-designs,.most-downloaded,.recent-list,.activity-panel,.activity-card){background:#1d303a!important;color:#eff6fa!important;border-color:#46616e!important}
+html[data-theme="dark"] :is(.stat,.stat-card,.stats-card,.stat-box,.hero-stat,.popular,.popular-section,.popular-card,.popular-panel,.leaderboard,.leader-card,.leader-row,.leader-preview,.leader-meta,.feature-card,.section-card,.highlight-card,.insight-card,.dashboard-card,.trending-card,.top-design,.top-designs,.most-downloaded) :is(h1,h2,h3,h4,p,span,strong,b,small,label,div){color:#edf5f9!important}
+html[data-theme="dark"] :is(.stat,.stat-card,.stats-card,.stat-box,.hero-stat,.popular,.popular-section,.popular-card,.popular-panel,.leaderboard,.leader-card,.leader-row,.feature-card,.section-card,.highlight-card,.insight-card,.dashboard-card) :is(.eyebrow,.label,.muted,small){color:#b9ccd7!important}
+html[data-theme="dark"] :is(.stat,.stat-card,.stats-card,.stat-box,.hero-stat,.popular,.popular-section,.popular-card,.popular-panel,.leaderboard,.leader-card,.leader-row,.feature-card,.section-card,.highlight-card,.insight-card,.dashboard-card) a{color:#c5eafa!important}
+html[data-theme="dark"] .stat *{text-shadow:none!important}
+#wd-theme-toggle{display:inline-flex;justify-content:center;align-items:center;gap:12px;font-weight:700}
+#wd-theme-toggle::before{content:"";width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px #ffffff1a,0 0 12px 4px #ffffff92;animation:wd-light-pulse 2.4s ease-in-out infinite}
+html[data-theme="light"] #wd-theme-toggle::before{background:#f4f7ff;box-shadow:0 0 0 3px #b6c8d533,0 0 7px 2px #9bb2c766}
+@keyframes wd-light-pulse{0%,100%{opacity:.55;box-shadow:0 0 3px 1px #ffffff66}50%{opacity:1;box-shadow:0 0 13px 4px #ffffffbb}}
+@media(prefers-reduced-motion:reduce){#wd-theme-toggle::before{animation:none}}
