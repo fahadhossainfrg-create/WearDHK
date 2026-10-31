@@ -247,6 +247,19 @@ async function handler(req,res){
  if(u.pathname.startsWith('/api/design/')){const id=decodeURIComponent(u.pathname.slice('/api/design/'.length)),item=catalogue.find(x=>x.id===id);if(!item)return json(res,{error:'Design not found'},404);return json(res,{item:{...item,downloads:Number(downloadCounts[item.id]||0),isDuplicate:duplicateIds().has(item.id),duplicateOf:duplicateRelations().get(item.id)||null}})}
  if(u.pathname==='/api/suggestions'){const normalize=value=>String(value||'').toLowerCase().replace(/[_-]+/g,' ').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim(),q=normalize(u.searchParams.get('q')||'');if(q.length<2)return json(res,{items:[]});const items=catalogue.filter(x=>!duplicateIds().has(x.id)&&normalize(x.name+' '+x.category+' '+x.folder).includes(q)).sort((a,b)=>{const an=normalize(a.name),bn=normalize(b.name);return Number(bn.startsWith(q))-Number(an.startsWith(q))||Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0)||a.name.localeCompare(b.name)}).slice(0,8).map(x=>({id:x.id,name:x.name,category:x.category,mime:x.mime,size:x.size,updated:x.updated,preview:x.preview}));return json(res,{items})}
  if(u.pathname==='/api/categories'){const duplicateSet=duplicateIds(),view=u.searchParams.get('view')||'all',map=new Map();for(const x of catalogue){if(view==='duplicates'?!duplicateSet.has(x.id):duplicateSet.has(x.id))continue;for(const [source,name] of [[x.source,x.category],...(isArabicDesign(x.name)?[['Arabic Designs','Arabic Designs']]:[])]){const key=source+'|||'+name;map.set(key,(map.get(key)||0)+1);}}return json(res,{categories:[...map].map(([k,count])=>({source:k.split('|||')[0],name:k.split('|||')[1],count})).sort((a,b)=>b.count-a.count)})}
+ if(u.pathname==='/api/visual-candidates'){
+  const candidates=catalogue.filter(x=>/^image\/(png|jpeg|webp)/i.test(x.mime||'')&&Number(x.size||0)>0&&Number(x.size)<8*1048576).slice(0,24);
+  const hashes=[];
+  for(const item of candidates){try{
+   const source=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
+   const buf=Buffer.from(await source.arrayBuffer());if(buf.length>8*1048576)continue;
+   const raw=await sharp(buf,{limitInputPixels:24000000}).resize(9,8,{fit:'fill'}).greyscale().raw().toBuffer();
+   let bits='';for(let y=0;y<8;y++)for(let x=0;x<8;x++)bits+=raw[y*9+x]>raw[y*9+x+1]?'1':'0';
+   hashes.push({id:item.id,name:item.name,hash:bits});
+  }catch(e){continue}}
+  const groups=[];for(let i=0;i<hashes.length;i++)for(let j=i+1;j<hashes.length;j++){const a=hashes[i],b=hashes[j];let distance=0;for(let k=0;k<64;k++)if(a.hash[k]!==b.hash[k])distance++;if(distance<=7)groups.push({a:{id:a.id,name:a.name},b:{id:b.id,name:b.name},distance,confidence:'review-needed'});}
+  return json(res,{inspected:hashes.length,limit:24,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'});
+ }
  if(u.pathname==='/api/duplicate-candidates'){
   const groups=new Map(),exact=duplicateIds();const compact=v=>String(v||'').toLowerCase().replace(/\.(png|jpe?g|webp|ai|eps|svg|pdf|psd)$/,'').replace(/\b(copy|final|v\d+|duplicate|new|design|artwork|\d+)\b/g,' ').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim();
   for(const x of catalogue){if(exact.has(x.id))continue;const key=compact(x.name);if(key.length<7)continue;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(x)}
