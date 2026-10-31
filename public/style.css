@@ -170,3 +170,5 @@ html[data-theme="dark"] .top-downloads h3,html[data-theme="dark"] .top-downloads
 html[data-theme="dark"] .top-downloads .eyebrow{color:#b9d7e3!important}
 html[data-theme="dark"] .top-downloads .popular-item{background:#263d49!important;color:#f1f6f8!important;border-color:#597585!important}
 html[data-theme="dark"] .top-downloads .popular-item span,html[data-theme="dark"] .top-downloads .popular-item strong{color:#f1f6f8!important;opacity:1!important}
+
+.modal-image.is-loading::before{content:'Loading preview…';position:absolute;z-index:0;color:#71838d;font-size:13px;font-weight:650;letter-spacing:.02em;animation:previewPulse 1.1s ease-in-out infinite alternate}@keyframes previewPulse{from{opacity:.45}to{opacity:1}}
