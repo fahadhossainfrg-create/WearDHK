@@ -14,7 +14,7 @@ const portArgIndex=process.argv.indexOf('--port'),portArg=portArgIndex>=0?proces
 const port=Number(process.env.PORT||portArg||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(5,Math.min(30,Number(process.env.SYNC_CONCURRENCY||20)));
 let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
-let visualResult=null,visualScanRunning=false;
+let visualResult=null,visualScanRunning=false,aiClassifyRunning=false;
 const visualHashIndex=new Map();
 const syncAuthAttempts=new Map();
 const downloadsPath=path.join(__dirname,'download-counts.json');
@@ -252,6 +252,32 @@ async function handler(req,res){
  if(u.pathname.startsWith('/api/design/')){const id=decodeURIComponent(u.pathname.slice('/api/design/'.length)),item=catalogue.find(x=>x.id===id);if(!item)return json(res,{error:'Design not found'},404);return json(res,{item:{...item,downloads:Number(downloadCounts[item.id]||0),isDuplicate:duplicateIds().has(item.id),duplicateOf:duplicateRelations().get(item.id)||null}})}
  if(u.pathname==='/api/suggestions'){const normalize=value=>String(value||'').toLowerCase().replace(/[_-]+/g,' ').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim(),q=normalize(u.searchParams.get('q')||'');if(q.length<2)return json(res,{items:[]});const items=catalogue.filter(x=>!duplicateIds().has(x.id)&&normalize(x.name+' '+x.category+' '+x.folder).includes(q)).sort((a,b)=>{const an=normalize(a.name),bn=normalize(b.name);return Number(bn.startsWith(q))-Number(an.startsWith(q))||Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0)||a.name.localeCompare(b.name)}).slice(0,8).map(x=>({id:x.id,name:x.name,category:x.category,mime:x.mime,size:x.size,updated:x.updated,preview:x.preview}));return json(res,{items})}
  if(u.pathname==='/api/categories'){const duplicateSet=duplicateIds(),view=u.searchParams.get('view')||'all',map=new Map();for(const x of catalogue){if(view==='duplicates'?!duplicateSet.has(x.id):duplicateSet.has(x.id))continue;for(const [source,name] of [[x.source,x.category],...(isArabicDesign(x.name)?[['Arabic Designs','Arabic Designs']]:[])]){const key=source+'|||'+name;map.set(key,(map.get(key)||0)+1);}}return json(res,{categories:[...map].map(([k,count])=>({source:k.split('|||')[0],name:k.split('|||')[1],count})).sort((a,b)=>b.count-a.count)})}
+ if(u.pathname==='/api/ai-category'){
+  if(req.method!=='POST')return json(res,{error:'Use POST'},405);
+  if(!process.env.GEMINI_API_KEY)return json(res,{error:'Image recognition not configured. Set GEMINI_API_KEY in Render.'},503);
+  let raw='';try{for await(const chunk of req){raw+=chunk;if(raw.length>2048)return json(res,{error:'Request too large'},413)}}catch{return json(res,{error:'Invalid request'},400)}
+  let data;try{data=JSON.parse(raw)}catch{return json(res,{error:'Invalid JSON'},400)}
+  const expected=process.env.TITLE_EDIT_PASSWORD||'';
+  if(!expected||typeof data.password!=='string'||!crypto.timingSafeEqual(crypto.createHash('sha256').update(data.password).digest(),crypto.createHash('sha256').update(expected).digest()))return json(res,{error:'Administrator password required'},403);
+  const item=catalogue.find(x=>x.id===data.id);if(!item)return json(res,{error:'Design not found'},404);
+  if(!/^image\/(png|jpeg|webp)$/i.test(item.mime||'')||Number(item.size)>1500000)return json(res,{error:'Only PNG, JPG or WEBP images under 1.5 MB are supported'},422);
+  if(aiClassifyRunning)return json(res,{error:'Another classification is running'},429);
+  aiClassifyRunning=true;
+  try{
+   const imageResponse=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
+   const imageBuffer=Buffer.from(await imageResponse.arrayBuffer());if(imageBuffer.length>1500000)return json(res,{error:'Image exceeds size limit'},413);
+   const jpeg=await sharp(imageBuffer,{limitInputPixels:24000000}).resize({width:512,height:512,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:72}).toBuffer();
+   const model=process.env.GEMINI_IMAGE_MODEL||'gemini-2.5-flash';
+   const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
+   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
+   let response;try{response=await fetch(url,{method:'POST',headers:{'x-goog-api-key':process.env.GEMINI_API_KEY,'content-type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:'Classify this design by its visual contents, not its filename. Return ONLY JSON with keys category (one of: Arabic / Islamic, Anime / Manga, Typography, Nature / Animals, Streetwear, Abstract / Geometric, Other), tags (array of at most 6 short visible-subject tags), and confidence (low, medium or high). Avoid naming people whose identities you cannot verify.'},{inline_data:{mime_type:'image/jpeg',data:jpeg.toString('base64')}}]}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),signal:controller.signal})}finally{clearTimeout(timeout)}
+   if(!response.ok)return json(res,{error:'AI provider error '+response.status},502);
+   const result=await response.json();let candidate;try{candidate=JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text||'{}')}catch{return json(res,{error:'Invalid AI response'},502)}
+   const allowed=['Arabic / Islamic','Anime / Manga','Typography','Nature / Animals','Streetwear','Abstract / Geometric','Other'];
+   const category=allowed.includes(candidate.category)?candidate.category:'Other';
+   return json(res,{id:item.id,category,tags:Array.isArray(candidate.tags)?candidate.tags.filter(x=>typeof x==='string').slice(0,6).map(x=>x.slice(0,40)):[],confidence:['low','medium','high'].includes(candidate.confidence)?candidate.confidence:'low',note:'AI-generated suggestion. No Google Drive files or metadata were modified.'});
+  }catch(e){return json(res,{error:e.name==='AbortError'?'AI request timed out':'Classification failed'},502)}finally{aiClassifyRunning=false}
+ }
  if(u.pathname==='/api/visual-candidates'){
   const samplePage=Math.max(0,Math.min(100,Number.parseInt(u.searchParams.get('page')||'0',10)||0));
   if(visualResult&&visualResult.page===samplePage&&Date.now()-visualResult.at<600000)return json(res,visualResult.data);
