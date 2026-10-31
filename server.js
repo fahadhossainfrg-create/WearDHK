@@ -260,19 +260,19 @@ async function handler(req,res){
   const expected=process.env.TITLE_EDIT_PASSWORD||'';
   if(!expected||typeof data.password!=='string'||!crypto.timingSafeEqual(crypto.createHash('sha256').update(data.password).digest(),crypto.createHash('sha256').update(expected).digest()))return json(res,{error:'Administrator password required'},403);
   const item=catalogue.find(x=>x.id===data.id);if(!item)return json(res,{error:'Design not found'},404);
-  if(!/^image\/(png|jpeg|webp)$/i.test(item.mime||'')||Number(item.size)>1500000)return json(res,{error:'Only PNG, JPG or WEBP images under 1.5 MB are supported'},422);
+  if(!/^image\/(png|jpeg|webp)$/i.test(item.mime||'')||Number(item.size)>12*1048576)return json(res,{error:'Only PNG, JPG or WEBP images up to 12 MB are supported'},422);
   if(aiClassifyRunning||Date.now()-aiLastRequest<30000)return json(res,{error:'AI classification is limited to one request every 30 seconds'},429);
   aiLastRequest=Date.now();
   aiClassifyRunning=true;
   try{
    const imageResponse=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
-   const imageBuffer=Buffer.from(await imageResponse.arrayBuffer());if(imageBuffer.length>1500000)return json(res,{error:'Image exceeds size limit'},413);
+   const imageBuffer=Buffer.from(await imageResponse.arrayBuffer());if(imageBuffer.length>12*1048576)return json(res,{error:'Original image exceeds 12 MB limit'},413);
    const jpeg=await sharp(imageBuffer,{limitInputPixels:24000000}).resize({width:512,height:512,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:72}).toBuffer();
    const model=process.env.GEMINI_IMAGE_MODEL||'gemini-2.5-flash';
    const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
    let response;try{response=await fetch(url,{method:'POST',headers:{'x-goog-api-key':process.env.GEMINI_API_KEY,'content-type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:'Classify this design by its visual contents, not its filename. Return ONLY JSON with keys category (one of: Arabic / Islamic, Anime / Manga, Typography, Nature / Animals, Streetwear, Abstract / Geometric, Other), tags (array of at most 6 short visible-subject tags), and confidence (low, medium or high). Avoid naming people whose identities you cannot verify.'},{inline_data:{mime_type:'image/jpeg',data:jpeg.toString('base64')}}]}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),signal:controller.signal})}finally{clearTimeout(timeout)}
-   if(!response.ok)return json(res,{error:'AI provider error '+response.status},502);
+   if(!response.ok){let reason='';try{const failure=await response.json();reason=String(failure.error?.message||'').slice(0,170)}catch{}const label=response.status===429?'Gemini quota or rate limit exceeded':response.status===403?'Gemini API key or project permission denied':response.status===400?'Gemini request or model configuration invalid':response.status===404?'Gemini model unavailable':'Gemini provider error '+response.status;return json(res,{error:label+(reason?' — '+reason:'')},502)}
    const result=await response.json();let candidate;try{candidate=JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text||'{}')}catch{return json(res,{error:'Invalid AI response'},502)}
    const allowed=['Arabic / Islamic','Anime / Manga','Typography','Nature / Animals','Streetwear','Abstract / Geometric','Other'];
    const category=allowed.includes(candidate.category)?candidate.category:'Other';
