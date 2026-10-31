@@ -14,8 +14,7 @@ const portArgIndex=process.argv.indexOf('--port'),portArg=portArgIndex>=0?proces
 const port=Number(process.env.PORT||portArg||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(5,Math.min(30,Number(process.env.SYNC_CONCURRENCY||20)));
 let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
-let visualResult=null,visualScanRunning=false,aiClassifyRunning=false,aiLastRequest=0;
-const visualHashIndex=new Map();
+let aiClassifyRunning=false,aiLastRequest=0;
 const syncAuthAttempts=new Map();
 const downloadsPath=path.join(__dirname,'download-counts.json');
 let personalSync={favourites:[],boards:[],updatedAt:null};
@@ -278,25 +277,6 @@ async function handler(req,res){
    const category=allowed.includes(candidate.category)?candidate.category:'Other';
    return json(res,{id:item.id,category,tags:Array.isArray(candidate.tags)?candidate.tags.filter(x=>typeof x==='string').slice(0,6).map(x=>x.slice(0,40)):[],confidence:['low','medium','high'].includes(candidate.confidence)?candidate.confidence:'low',note:'AI-generated suggestion. No Google Drive files or metadata were modified.'});
   }catch(e){return json(res,{error:e.name==='AbortError'?'AI request timed out':'Classification failed'},502)}finally{aiClassifyRunning=false}
- }
- if(u.pathname==='/api/visual-candidates'){
-  const samplePage=Math.max(0,Math.min(100,Number.parseInt(u.searchParams.get('page')||'0',10)||0));
-  if(visualResult&&visualResult.page===samplePage&&Date.now()-visualResult.at<600000)return json(res,visualResult.data);
-  if(visualScanRunning)return json(res,{error:'Visual scan in progress; retry shortly'},429);
-  visualScanRunning=true;
-  try{
-  const candidates=catalogue.filter(x=>/^image\/(png|jpeg|webp)/i.test(x.mime||'')&&Number(x.size||0)>0&&Number(x.size)<2*1048576).slice(samplePage*12,samplePage*12+12);
-  const hashes=[];
-  for(const item of candidates){try{
-   const source=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
-   const buf=Buffer.from(await source.arrayBuffer());if(buf.length>2*1048576)continue;
-   const raw=await sharp(buf,{limitInputPixels:24000000}).resize(9,8,{fit:'fill'}).greyscale().raw().toBuffer();
-   let bits='';for(let y=0;y<8;y++)for(let x=0;x<8;x++)bits+=raw[y*9+x]>raw[y*9+x+1]?'1':'0';
-   const record={id:item.id,name:item.name,hash:bits};hashes.push(record);visualHashIndex.set(item.id,record);if(visualHashIndex.size>1500)visualHashIndex.delete(visualHashIndex.keys().next().value);
-  }catch(e){continue}}
-  const groups=[];const indexed=[...visualHashIndex.values()];for(let i=0;i<hashes.length;i++)for(let j=0;j<indexed.length;j++){const a=hashes[i],b=indexed[j];if(a.id>=b.id)continue;let distance=0;for(let k=0;k<64;k++)if(a.hash[k]!==b.hash[k])distance++;if(distance<=7)groups.push({a:{id:a.id,name:a.name},b:{id:b.id,name:b.name},distance,confidence:'review-needed'});}
-  const result={inspected:hashes.length,indexed:visualHashIndex.size,limit:12,page:samplePage,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'};visualResult={at:Date.now(),page:samplePage,data:result};return json(res,result);
-  }finally{visualScanRunning=false}
  }
  if(u.pathname==='/api/personal-sync'){
   if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID||!statsStorage.ready)return json(res,{error:'Persistent Drive backup unavailable'},503);
