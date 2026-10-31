@@ -80,7 +80,28 @@ async function children(id){
  do{const u=new URL('https://www.googleapis.com/drive/v3/files');u.searchParams.set('q',"'"+id+"' in parents and trashed = false");u.searchParams.set('fields','nextPageToken,files(id,name,mimeType,modifiedTime,size,description,webViewLink,thumbnailLink,md5Checksum)');u.searchParams.set('pageSize','1000');u.searchParams.set('supportsAllDrives','true');u.searchParams.set('includeItemsFromAllDrives','true');if(next)u.searchParams.set('pageToken',next);
  const data=await(await drive(u)).json();found.push(...(data.files||[]));next=data.nextPageToken||'';}while(next);return found;
 }
-const thumbnailFiles=new Map(),thumbnailRetry=new Map();
+const thumbnailFiles=new Map(),thumbnailRetry=new Map(),persistedThumbnailIds=new Set(),queuedThumbnailIds=new Set();
+let thumbnailPreparationQueue=[],thumbnailPreparationRunning=false;
+async function refreshThumbnailIndex(){
+ const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
+ try{const files=await children(folder);persistedThumbnailIds.clear();for(const file of files){const name=String(file.name||'');if(/\.webp$/i.test(name))persistedThumbnailIds.add(name.replace(/\.webp$/i,''));}}
+ catch(e){console.warn('Could not refresh saved thumbnail index:',e.message)}
+}
+async function drainThumbnailQueue(){
+ if(thumbnailPreparationRunning)return;thumbnailPreparationRunning=true;
+ try{while(thumbnailPreparationQueue.length){const item=thumbnailPreparationQueue.shift();try{const preview=await getOrCreateThumbnail(item);if(preview.stored===false){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Thumbnail generated but not saved; retry scheduled:',item.id)}else{persistedThumbnailIds.add(item.id);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}}catch(e){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}finally{queuedThumbnailIds.delete(item.id)}}}
+ finally{thumbnailPreparationRunning=false;if(thumbnailPreparationQueue.length)void drainThumbnailQueue();}
+}
+function scheduleThumbnailPreparation(rows,previousIds){
+ const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
+ const candidates=rows.filter(item=>/^image\//.test(item.mime||'')||/\.(ai|eps|pdf)$/i.test(item.name||''));
+ const fresh=[],backfill=[],now=Date.now();
+ for(const item of candidates){if(persistedThumbnailIds.has(item.id)||queuedThumbnailIds.has(item.id)||(thumbnailRetry.get(item.id)||0)>now)continue;queuedThumbnailIds.add(item.id);(previousIds.has(item.id)?backfill:fresh).push(item);}
+ const byPopularity=(a,b)=>(Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0))||a.name.localeCompare(b.name);
+ fresh.sort(byPopularity);backfill.sort(byPopularity);
+ thumbnailPreparationQueue=[...fresh,...thumbnailPreparationQueue,...backfill];
+ void drainThumbnailQueue();
+}
 async function loadGeneratedThumbnail(sourceId){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return null;
  const query=new URL('https://www.googleapis.com/drive/v3/files');
@@ -120,8 +141,7 @@ async function sync(){
  stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink||/\.ai$/i.test(file.name),thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
  }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));scannedFolders=count;sourceStats=stats;}
  if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
- const isThumbnailCandidate=item=>/^image\//.test(item.mime||'')||/\.(ai|eps|pdf)$/i.test(item.name||'');const now=Date.now();const newlyAdded=rows.filter(item=>isThumbnailCandidate(item)&&(!previousIds.has(item.id)||((thumbnailRetry.get(item.id)||0)>0&&(thumbnailRetry.get(item.id)||0)<=now)));
- if(newlyAdded.length&&process.env.GOOGLE_THUMBNAILS_FOLDER_ID){(async()=>{for(const item of newlyAdded){try{await getOrCreateThumbnail(item);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}}})().catch(console.error);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
+ if(process.env.GOOGLE_THUMBNAILS_FOLDER_ID){await refreshThumbnailIndex();scheduleThumbnailPreparation(rows,previousIds);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
  errors=failures;scannedFolders=count;sourceStats=stats;
  }catch(e){errors=[e.message]}finally{syncing=false;}
  return !errors.length;
