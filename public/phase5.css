@@ -1,0 +1,22 @@
+/* WearDHK gallery tools */
+#preview{overscroll-behavior:contain}
+#preview.wd-expanded{width:calc(100vw - 16px)!important;max-width:calc(100vw - 16px)!important;height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}
+#preview.wd-expanded .modal-image{height:min(72dvh,850px)}
+#preview .modal-image{overflow:hidden;touch-action:pan-y}
+#preview .modal-image[data-art-background="checker"]{background-color:#fff;background-image:linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%);background-position:0 0,0 10px,10px -10px,-10px 0;background-size:20px 20px}
+#preview .modal-image[data-art-background="white"]{background:#fff}
+#preview .modal-image[data-art-background="black"]{background:#111}
+#preview .modal-image[data-art-background="grey"]{background:#8a8a8a}
+.wd-viewer-tools{padding:12px 18px;background:#f4f7f8;min-width:0}
+.wd-viewer-tools strong{display:block;margin-bottom:8px;font-size:12px}
+.wd-viewer-controls{display:flex;flex-wrap:wrap;align-items:center;gap:7px;min-width:0}
+.wd-viewer-controls button{white-space:normal;padding:8px 12px}
+.wd-viewer-controls select{max-width:100%;min-width:0;padding:9px 10px;border:1px solid #cad2d5;border-radius:8px;background:#fff}
+.wd-viewer-controls span{font-size:12px;min-width:40px;text-align:center}
+.wd-file-info{display:flex;flex-wrap:wrap;gap:6px;padding:8px 18px}
+.wd-file-info span{max-width:100%;overflow-wrap:anywhere;background:#f0f3f3;border-radius:8px;padding:5px 7px;font-size:10px}
+.wd-editor-details{min-width:0;max-width:100%;margin:16px 0;border:1px solid #d4ded7;border-radius:12px;overflow:hidden}
+.wd-editor-details>summary{padding:15px;cursor:pointer;font-size:13px;font-weight:700;background:#f0f4f2}
+.wd-editor-details .wd-review-panel{margin:0;border:0;border-radius:0}
+.wd-search-help{margin:5px 0 12px;color:#6b7d80;font-size:11px}
+@media(max-width:650px){.wd-viewer-tools{padding:10px 12px}.wd-viewer-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.wd-viewer-controls button,.wd-viewer-controls select{width:100%;min-width:0;padding:8px 5px;font-size:11px}.wd-file-info{padding:8px 12px}#preview.wd-expanded{border-radius:8px}}
