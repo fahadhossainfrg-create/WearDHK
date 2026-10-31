@@ -36,6 +36,8 @@ html[data-theme="light"] .main :is(.surprise,.surprise-btn,#surprise,.btn-surpri
 /* Mobile readability and non-overlapping classic navigation */
 html[data-theme="dark"] .library-tab,html[data-theme="dark"] .library-tab.active{color:#ecf4f8!important;border-bottom-color:#80b4ca!important}
 html[data-theme="dark"] .library-tabs{border-bottom-color:#567382!important}
+html[data-theme="dark"] .library-tabs .library-tab{background:#1b2d37!important;color:#c1d4dd!important;border:1px solid #536f7e!important;border-bottom:3px solid transparent!important;border-radius:10px 10px 0 0!important;opacity:1!important}
+html[data-theme="dark"] .library-tabs .library-tab.active{background:#355a6c!important;color:#fff!important;border-color:#9bcfe4!important;border-bottom-color:#9bcfe4!important;box-shadow:inset 0 -3px #9bcfe4!important}
 html[data-theme="dark"] .tile-info a{color:#b8e6ff!important;opacity:1!important}
 html[data-theme="dark"] .tile-info .path{color:#c6d8e2!important}
 html[data-theme="dark"] .mini-source{background:#243d4c!important;color:#f4f9fc!important}
