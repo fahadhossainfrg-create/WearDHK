@@ -3,6 +3,10 @@ const crypto=require('node:crypto'),fs=require('node:fs'),path=require('node:pat
 const file=path.join(__dirname,'verified-titles.json');
 let titles={};try{titles=JSON.parse(fs.readFileSync(file,'utf8'))}catch{}
 const failures=new Map();
+let persistTitles=null;
+module.exports.configurePersistence=fn=>{persistTitles=fn};
+module.exports.restoreTitles=incoming=>{if(!incoming||typeof incoming!=='object'||Array.isArray(incoming))return;for(const [id,title] of Object.entries(incoming)){if(/^[A-Za-z0-9_-]{3,150}$/.test(id)&&typeof title==='string'&&title.length>=2&&title.length<=120)titles[id]=title}save()};
+module.exports.exportTitles=()=>({...titles});
 function reply(res,status,data){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(data))}
 async function parse(req){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)throw Error('Request too large')}return JSON.parse(raw)}
 function save(){const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(titles));fs.renameSync(tmp,file)}
@@ -26,7 +30,11 @@ async function route(req,res,u,catalogue){
    failures.set(rateKey,{count:count>=5?0:count,until:count>=5?now+15*60000:0});
    reply(res,403,{error:'Incorrect password'});return true
   }
-  failures.delete(rateKey);titles[id]=title;save();reply(res,200,{verified:true,id,title});return true
+  failures.delete(rateKey);
+  if(!persistTitles){reply(res,503,{error:'Persistent title storage is not configured. No changes were saved.'});return true}
+  const before=titles[id];titles[id]=title;
+  try{await persistTitles();save()}catch(e){if(before===undefined)delete titles[id];else titles[id]=before;reply(res,503,{error:'Could not persist title to Google Drive backup. No changes were saved.'});return true}
+  reply(res,200,{verified:true,id,title});return true
  }catch(e){reply(res,500,{error:'Could not save title'});return true}
 }
 module.exports=route;
