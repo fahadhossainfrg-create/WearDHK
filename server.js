@@ -129,8 +129,14 @@ function scheduleThumbnailPreparation(rows,previousIds){
  for(const item of candidates){if(persistedThumbnailIds.has(item.id)||queuedThumbnailIds.has(item.id)||(thumbnailRetry.get(item.id)||0)>now)continue;queuedThumbnailIds.add(item.id);(previousIds.has(item.id)?backfill:fresh).push(item);}
  const byPopularity=(a,b)=>(Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0))||a.name.localeCompare(b.name);
  fresh.sort(byPopularity);backfill.sort(byPopularity);
- thumbnailPreparationQueue=[...fresh,...thumbnailPreparationQueue,...backfill];
- void drainThumbnailQueue();
+ // Keep background conversions bounded on the 512 MB Render instance.
+ // Deferred items are picked up on the next successful sync; never discard originals.
+ const MAX_BACKGROUND_JOBS=50;
+ const selected=[...fresh,...thumbnailPreparationQueue,...backfill].slice(0,MAX_BACKGROUND_JOBS);
+ const kept=new Set(selected.map(item=>item.id));
+ for(const item of [...fresh,...thumbnailPreparationQueue,...backfill])if(!kept.has(item.id))queuedThumbnailIds.delete(item.id);
+ thumbnailPreparationQueue=selected;
+ if(thumbnailPreparationQueue.length)void drainThumbnailQueue();
 }
 async function loadGeneratedThumbnail(sourceId){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return null;
