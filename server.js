@@ -1,5 +1,6 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const sharp=require('sharp');
 const roots=[
  {id:'128JL_dyiO2xFXaRKh4zj8al5w2Y6XoNP',name:'Main Library'},
  {id:'1QImLRpunvmjkhHc8_CqewTw7u6lqvoLb',name:'Organised Library'},
@@ -70,6 +71,32 @@ async function children(id){
  do{const u=new URL('https://www.googleapis.com/drive/v3/files');u.searchParams.set('q',"'"+id+"' in parents and trashed = false");u.searchParams.set('fields','nextPageToken,files(id,name,mimeType,modifiedTime,size,description,webViewLink,thumbnailLink,md5Checksum)');u.searchParams.set('pageSize','1000');u.searchParams.set('supportsAllDrives','true');u.searchParams.set('includeItemsFromAllDrives','true');if(next)u.searchParams.set('pageToken',next);
  const data=await(await drive(u)).json();found.push(...(data.files||[]));next=data.nextPageToken||'';}while(next);return found;
 }
+const thumbnailFiles=new Map();
+async function loadGeneratedThumbnail(sourceId){
+ const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return null;
+ const query=new URL('https://www.googleapis.com/drive/v3/files');
+ query.searchParams.set('q',"'"+folder+"' in parents and appProperties has { key='wearDhkSourceId' and value='"+sourceId+"' } and trashed = false");
+ query.searchParams.set('fields','files(id,name,mimeType)');query.searchParams.set('pageSize','1');query.searchParams.set('supportsAllDrives','true');query.searchParams.set('includeItemsFromAllDrives','true');
+ const data=await(await drive(query)).json();const file=data.files?.[0];if(!file)return null;
+ const response=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(file.id)+'?alt=media&supportsAllDrives=true');
+ return {bytes:Buffer.from(await response.arrayBuffer()),mime:file.mimeType||'image/webp',driveThumbnailId:file.id};
+}
+async function createDriveThumbnail(item){
+ const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)throw Error('GOOGLE_THUMBNAILS_FOLDER_ID is not configured');
+ const original=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
+ const input=Buffer.from(await original.arrayBuffer());if(input.length>40*1024*1024)throw Error('Original exceeds thumbnail input limit');
+ const bytes=await sharp(input,{limitInputPixels:50000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();
+ const metadata={name:item.id+'.webp',mimeType:'image/webp',parents:[folder],appProperties:{wearDhkSourceId:item.id}};
+ const form=new FormData();form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));form.append('file',new Blob([bytes],{type:'image/webp'}),metadata.name);
+ const response=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,mimeType',{method:'POST',headers:{authorization:'Bearer '+await token()},body:form});
+ if(!response.ok)throw Error('Thumbnail upload failed ('+response.status+'): '+(await response.text()).slice(0,180));
+ const saved=await response.json();return {bytes,mime:'image/webp',driveThumbnailId:saved.id};
+}
+async function getOrCreateThumbnail(item){
+ if(thumbnailFiles.has(item.id))return thumbnailFiles.get(item.id);
+ const existing=await loadGeneratedThumbnail(item.id);if(existing){thumbnailFiles.set(item.id,existing);return existing}
+ const generated=await createDriveThumbnail(item);thumbnailFiles.set(item.id,generated);return generated;
+}
 async function sync(){
  if(syncing)return false;syncing=true;syncStartedAt=new Date().toISOString();const rows=[],failures=[],seen=new Set(),stats=Object.fromEntries(roots.map(x=>[x.name,{files:0,folders:0,errors:0}]));let count=0;
  try{
@@ -83,7 +110,9 @@ async function sync(){
  if(!(/^image\//.test(file.mimeType||'')||/\.(ai|eps|svg|pdf|psd|webp|png|jpe?g|avif|tiff?)$/i.test(file.name)))continue;
  stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink,thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
  }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));scannedFolders=count;sourceStats=stats;}
- if(!failures.length&&rows.length){catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
+ if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
+ const newlyAdded=rows.filter(x=>!previousIds.has(x.id)&&/^image\\//.test(x.mime||''));
+ if(newlyAdded.length&&process.env.GOOGLE_THUMBNAILS_FOLDER_ID){(async()=>{for(const item of newlyAdded){try{await getOrCreateThumbnail(item);console.log('Created Drive thumbnail for new design:',item.name)}catch(e){console.warn('Could not create Drive thumbnail:',item.id,e.message)}}})().catch(console.error);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
  errors=failures;scannedFolders=count;sourceStats=stats;
  }catch(e){errors=[e.message]}finally{syncing=false;}
  return !errors.length;
@@ -148,10 +177,11 @@ async function handler(req,res){
   const requestThumbnail=async()=>{
    const metadata=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=thumbnailLink,mimeType&supportsAllDrives=true')).json();
    const link=item.thumbnail||metadata.thumbnailLink;
-   if(!link)throw Error('No Drive thumbnail available');
-   const response=await fetch(link,{headers:{authorization:'Bearer '+await token()}});
-   if(!response.ok)throw Error('Thumbnail HTTP '+response.status);
-   return {bytes:Buffer.from(await response.arrayBuffer()),mime:response.headers.get('content-type')||'image/jpeg'};
+   if(!link)return getOrCreateThumbnail(item);
+   try{const response=await fetch(link,{headers:{authorization:'Bearer '+await token()}});
+    if(!response.ok)throw Error('Thumbnail HTTP '+response.status);
+    return {bytes:Buffer.from(await response.arrayBuffer()),mime:response.headers.get('content-type')||'image/jpeg'};
+   }catch(e){console.warn('Drive thumbnail failed; generating a stored thumbnail:',id,e.message);return getOrCreateThumbnail(item)}
   };
   const thumbOnly=u.searchParams.get('thumb')==='1',cacheKey=id+(thumbOnly?':thumb':':full');
   const cached=previewCache.get(cacheKey);let image=cached&&cached.expires>Date.now()?cached.image:null;
