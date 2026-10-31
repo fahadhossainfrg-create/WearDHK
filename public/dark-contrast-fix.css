@@ -1,0 +1,23 @@
+/* Dark theme contrast repair: all nested surfaces inherit a coherent palette. */
+html[data-theme="dark"]{--wd-bg:#111c24;--wd-surface:#1b2b35;--wd-raised:#263c49;--wd-border:#486373;--wd-text:#f1f6f8;--wd-muted:#bbced8;--wd-input:#223743;color-scheme:dark}
+html[data-theme="dark"] body,html[data-theme="dark"] .shell,html[data-theme="dark"] .main{background:var(--wd-bg)!important;color:var(--wd-text)!important}
+html[data-theme="dark"] :is(.toolbar,.search-shell,.search-wrap,.search-box,.filters,.category-pills,.categories,.categories-wrap,.filter-bar,.gallery-head,.gallery-header,.head-actions,.tabs,.pager,.tile,.tile-info,.wd-advanced,.wd-related,.wd-review-panel,.wd-editor-details,.wd-viewer-tools,.modal-info,.metadata-grid,.metadata-card,.health-card,.board-row,.wd-sync-history,.wd-selection-bar,.wd-quick-actions,.wd-personal-backup,.tool-dialog,.health-dialog,dialog){background-color:var(--wd-surface)!important;color:var(--wd-text)!important;border-color:var(--wd-border)!important}
+html[data-theme="dark"] :is(h1,h2,h3,h4,h5,h6,p,label,small,strong,summary,.gallery-title,.tile-name,.tile-info a,.metadata-card strong,.metadata-grid strong,.wd-related strong,.wd-status-summary,.category-pill,.tab,.stat-label){color:var(--wd-text)!important}
+html[data-theme="dark"] :is(.eyebrow,.muted,.tile-meta,.tile-info small,.modal-info p,.wd-search-help,.wd-advanced p,.wd-sync-history small,.wd-review-panel small,.metadata-card small,.download-label){color:var(--wd-muted)!important}
+html[data-theme="dark"] :is(input,select,textarea,.search-shell input,.search-box input,.toolbar select,.wd-advanced-fields input,.wd-advanced-fields select,.wd-review-panel input,.wd-review-panel select){box-sizing:border-box;background:var(--wd-input)!important;color:var(--wd-text)!important;border:1px solid var(--wd-border)!important;max-width:100%;min-width:0}
+html[data-theme="dark"] input::placeholder,html[data-theme="dark"] textarea::placeholder{color:#b0c6d2!important;opacity:1}
+html[data-theme="dark"] :is(.secondary,.category-pill,.categories button,.category-list button,.tabs button,.tab,.wd-related button,.wd-selection-bar button,.wd-quick-actions button){background:var(--wd-raised)!important;color:var(--wd-text)!important;border:1px solid var(--wd-border)!important}
+html[data-theme="dark"] :is(.primary,.source.selected,.category-pill.active,.tabs button.active,.tab.active){background:#38647a!important;color:#fff!important;border-color:#6089a0!important}
+html[data-theme="dark"] :is(.secondary,.primary,input,select,button,a):focus-visible{outline:3px solid #8acbe9!important;outline-offset:2px}
+html[data-theme="dark"] :is(.wd-viewer-controls,.wd-extras,.wd-advanced-fields,.wd-related,.modal-actions){color:var(--wd-text)!important}
+html[data-theme="dark"] .wd-file-info span{background:var(--wd-raised)!important;color:var(--wd-text)!important}
+html[data-theme="dark"] .wd-sync-safety{background:#42351e!important;color:#ffe9bb!important}
+html[data-theme="dark"] .modal-image[data-art-background="white"]{background:#fff!important}
+html[data-theme="dark"] .modal-image[data-art-background="black"]{background:#111!important}
+html[data-theme="dark"] .modal-image[data-art-background="grey"]{background:#888!important}
+html[data-theme="dark"] .modal-image[data-art-background="checker"]{background-color:#fff!important}
+html[data-theme="dark"] .sidebar{background:#17252e!important;color:#f1f6f8!important}
+html[data-theme="dark"] .sidebar :is(a,button,span,strong,small){color:#e6f0f5!important}
+html[data-theme="dark"] .wd-advanced{max-width:100%;min-width:0}
+html[data-theme="dark"] .wd-advanced summary{color:#f1f6f8!important}
+@media(max-width:650px){html[data-theme="dark"] .toolbar,html[data-theme="dark"] .wd-extras{max-width:100%;min-width:0}html[data-theme="dark"] .wd-advanced-fields{grid-template-columns:minmax(0,1fr)}}
