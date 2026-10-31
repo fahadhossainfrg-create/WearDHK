@@ -153,6 +153,7 @@ async function getOrCreateThumbnail(item){
  const existing=await loadGeneratedThumbnail(item.id);if(existing)return cacheThumbnail(item.id,existing);
  const generated=await createDriveThumbnail(item);return cacheThumbnail(item.id,generated);
 }
+async function childrenWithRetry(id){let error;for(let attempt=0;attempt<3;attempt++){try{return await children(id)}catch(e){error=e;if(attempt<2)await sleep(600*Math.pow(2,attempt)+Math.floor(Math.random()*250))}}throw error}
 async function sync(){
  if(syncing)return false;syncing=true;syncStartedAt=new Date().toISOString();const rows=[],failures=[],seen=new Set(),stats=Object.fromEntries(roots.map(x=>[x.name,{files:0,folders:0,errors:0}]));let count=0;
  try{
@@ -161,11 +162,12 @@ async function sync(){
  if(process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID){writeQueue=writeQueue.catch(()=>{}).then(()=>restoreDriveStats());await writeQueue;}
  const queue=roots.map(root=>({id:root.id,source:root.name,path:[]}));while(queue.length){
  const batch=queue.splice(0,scanConcurrency);await Promise.all(batch.map(async task=>{if(seen.has(task.source+':'+task.id))return;seen.add(task.source+':'+task.id);
- try{const files=await children(task.id);count++;stats[task.source].folders++;for(const file of files){
+ try{const files=await childrenWithRetry(task.id);count++;stats[task.source].folders++;for(const file of files){
  if(file.mimeType==='application/vnd.google-apps.folder'){queue.push({id:file.id,source:task.source,path:[...task.path,file.name]});continue;}
  if(!(/^image\//.test(file.mimeType||'')||/\.(ai|eps|svg|pdf|psd|webp|png|jpe?g|avif|tiff?)$/i.test(file.name)))continue;
  stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink||/\.ai$/i.test(file.name),thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
  }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));scannedFolders=count;sourceStats=stats;}
+ if(!failures.length&&catalogue.length>0&&rows.length<catalogue.length*0.65)failures.push('Sudden catalogue reduction; preserving previous complete catalogue');
  if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
  if(process.env.GOOGLE_THUMBNAILS_FOLDER_ID){await refreshThumbnailIndex();scheduleThumbnailPreparation(rows,previousIds);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
  errors=failures;scannedFolders=count;sourceStats=stats;
