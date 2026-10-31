@@ -43,6 +43,6 @@ module.exports=route;
 module.exports.titleFor=id=>titles[id]||null;
 module.exports.configurePersistence=fn=>{persistTitles=fn};
 module.exports.setStorageReady=value=>{storageReady=!!value};
-module.exports.restoreTitles=incoming=>{if(!incoming||typeof incoming!=='object'||Array.isArray(incoming))return;for(const [id,title] of Object.entries(incoming)){if(/^[A-Za-z0-9_-]{3,150}$/.test(id)&&typeof title==='string'&&title.length>=2&&title.length<=120)titles[id]=title}save()};
+module.exports.restoreTitles=incoming=>{if(!incoming||typeof incoming!=='object'||Array.isArray(incoming))return;const restored={};for(const [id,title] of Object.entries(incoming)){if(/^[A-Za-z0-9_-]{3,150}$/.test(id)&&typeof title==='string'&&title.length>=2&&title.length<=120)restored[id]=title}titles=restored;save()};
 module.exports.exportTitles=()=>({...titles});
 
