@@ -1,0 +1,19 @@
+/* Minimal independent theme, retained across rollback */
+html[data-theme="dark"]{color-scheme:dark}
+html[data-theme="dark"] body,html[data-theme="dark"] .main{background:#111c24;color:#f1f6f8}
+html[data-theme="dark"] .sidebar{background:#182934;color:#f1f6f8}
+html[data-theme="dark"] :is(.sidebar a,.sidebar button,.sidebar strong,.sidebar small){color:#eaf3f7}
+html[data-theme="dark"] :is(.tile,.tile-info,.stats .stat,.download-leaders,.leader,.toolbar,.modal-info,.wd-review-panel,.board-row,.health-dialog,.tool-dialog,dialog,.pager,.tabs){background:#1e303b;color:#f1f6f8;border-color:#4a6877}
+html[data-theme="dark"] :is(h1,h2,h3,h4,.stat strong,.stat small,.tile-name,.tile-info strong,.leader strong,.leader span,.modal-info h2,.library-tab){color:#f1f6f8!important;opacity:1}
+html[data-theme="dark"] :is(.muted,.eyebrow,.tile-meta,.tile-info small,.modal-info p,.download-leaders p){color:#c2d4df!important}
+html[data-theme="dark"] :is(input,select,textarea,.secondary,.chip,.view-btn,.search,.source-list button){background:#2a404e;color:#f1f6f8;border-color:#597585}
+html[data-theme="dark"] :is(input,textarea)::placeholder{color:#b8ccd7}
+html[data-theme="dark"] :is(button,a):focus-visible{outline:2px solid #9ad7f0;outline-offset:2px}
+html[data-theme="dark"] .primary,html[data-theme="dark"] .chip.active{background:#386980;color:#fff}
+html[data-theme="dark"] .metadata-grid span{background:#2a404e!important;color:#edf7fc!important;border-color:#597585!important}
+html[data-theme="dark"] .metadata-grid span :is(small,strong){color:#edf7fc!important}
+#wd-theme-switch{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:40px;padding:9px 13px;border:1px solid #b5c9d1;border-radius:10px;background:#fff;color:#203340;font:600 12px Poppins,system-ui,sans-serif;cursor:pointer}
+#wd-theme-switch:before{content:"";width:9px;height:9px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px #b9cbd38c,0 0 8px #b9cbd3}
+html[data-theme="dark"] #wd-theme-switch{background:#283f4d;color:#f1f6fa;border-color:#547483}
+html[data-theme="dark"] #wd-theme-switch:before{box-shadow:0 0 8px 2px #fff9}
+.wd-theme-wrap{display:flex;justify-content:flex-end;max-width:100%;margin:8px 0 14px}
