@@ -26,6 +26,7 @@ async function driveStatsCall(method,url,body){
  return response.json();
 }
 async function restoreDriveStats(){
+ titleOtp.setStorageReady(false);
  const id=process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID;if(!id)return;
  try{const result=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media')).json();
  if(!result||typeof result.counts!=='object'||Array.isArray(result.counts))throw Error('Unexpected statistics backup format');
@@ -35,7 +36,7 @@ async function restoreDriveStats(){
  for(const [key,value] of Object.entries(incoming))downloadCounts[key]=Math.max(Number(downloadCounts[key]||0),value);
  const driveBehind=Object.entries(downloadCounts).some(([key,value])=>value>Number(incoming[key]||0));
  if(driveBehind)await persistDriveStats();
- statsStorage.ready=true;statsStorage.error=null;statsStorage.lastSaved=result.updatedAt||null;saveDownloads();console.log('Restored Google Drive download counts:',Object.keys(downloadCounts).length);
+ statsStorage.ready=true;statsStorage.error=null;statsStorage.lastSaved=result.updatedAt||null;titleOtp.setStorageReady(true);saveDownloads();console.log('Restored Google Drive download counts:',Object.keys(downloadCounts).length);
  }catch(e){statsStorage.error=e.message;console.error('Google Drive statistics restore failed:',e.message)}
 }
 async function persistDriveStats(){
