@@ -99,7 +99,7 @@ async function refreshThumbnailIndex(){
 }
 async function drainThumbnailQueue(){
  if(thumbnailPreparationRunning)return;thumbnailPreparationRunning=true;
- try{while(thumbnailPreparationQueue.length){const item=thumbnailPreparationQueue.shift();try{const preview=await getOrCreateThumbnail(item);if(preview.stored===false){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Thumbnail generated but not saved; retry scheduled:',item.id)}else{persistedThumbnailIds.add(item.id);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}finally{thumbnailFiles.delete(item.id);queuedThumbnailIds.delete(item.id)}}}
+ try{while(thumbnailPreparationQueue.length){if(process.memoryUsage().rss>300*1024*1024){await new Promise(resolve=>setTimeout(resolve,15000));continue}const item=thumbnailPreparationQueue.shift();try{const preview=await getOrCreateThumbnail(item);if(preview.stored===false){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Thumbnail generated but not saved; retry scheduled:',item.id)}else{persistedThumbnailIds.add(item.id);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}finally{thumbnailFiles.delete(item.id);queuedThumbnailIds.delete(item.id)}await new Promise(resolve=>setTimeout(resolve,1800));}}
  finally{thumbnailPreparationRunning=false;if(thumbnailPreparationQueue.length)void drainThumbnailQueue();}
 }
 function scheduleThumbnailPreparation(rows,previousIds){
@@ -109,7 +109,7 @@ function scheduleThumbnailPreparation(rows,previousIds){
  for(const item of candidates){if(persistedThumbnailIds.has(item.id)||queuedThumbnailIds.has(item.id)||(thumbnailRetry.get(item.id)||0)>now)continue;queuedThumbnailIds.add(item.id);(previousIds.has(item.id)?backfill:fresh).push(item);}
  const byPopularity=(a,b)=>(Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0))||a.name.localeCompare(b.name);
  fresh.sort(byPopularity);backfill.sort(byPopularity);
- thumbnailPreparationQueue=[...fresh,...thumbnailPreparationQueue,...backfill];
+ const all=[...fresh,...thumbnailPreparationQueue,...backfill];thumbnailPreparationQueue=all.slice(0,24);const chosen=new Set(thumbnailPreparationQueue.map(x=>x.id));for(const item of all)if(!chosen.has(item.id))queuedThumbnailIds.delete(item.id);
  void drainThumbnailQueue();
 }
 async function loadGeneratedThumbnail(sourceId){
