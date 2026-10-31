@@ -252,11 +252,12 @@ async function handler(req,res){
  if(u.pathname==='/api/suggestions'){const normalize=value=>String(value||'').toLowerCase().replace(/[_-]+/g,' ').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim(),q=normalize(u.searchParams.get('q')||'');if(q.length<2)return json(res,{items:[]});const items=catalogue.filter(x=>!duplicateIds().has(x.id)&&normalize(x.name+' '+x.category+' '+x.folder).includes(q)).sort((a,b)=>{const an=normalize(a.name),bn=normalize(b.name);return Number(bn.startsWith(q))-Number(an.startsWith(q))||Number(downloadCounts[b.id]||0)-Number(downloadCounts[a.id]||0)||a.name.localeCompare(b.name)}).slice(0,8).map(x=>({id:x.id,name:x.name,category:x.category,mime:x.mime,size:x.size,updated:x.updated,preview:x.preview}));return json(res,{items})}
  if(u.pathname==='/api/categories'){const duplicateSet=duplicateIds(),view=u.searchParams.get('view')||'all',map=new Map();for(const x of catalogue){if(view==='duplicates'?!duplicateSet.has(x.id):duplicateSet.has(x.id))continue;for(const [source,name] of [[x.source,x.category],...(isArabicDesign(x.name)?[['Arabic Designs','Arabic Designs']]:[])]){const key=source+'|||'+name;map.set(key,(map.get(key)||0)+1);}}return json(res,{categories:[...map].map(([k,count])=>({source:k.split('|||')[0],name:k.split('|||')[1],count})).sort((a,b)=>b.count-a.count)})}
  if(u.pathname==='/api/visual-candidates'){
-  if(visualResult&&Date.now()-visualResult.at<600000)return json(res,visualResult.data);
+  const samplePage=Math.max(0,Math.min(100,Number.parseInt(u.searchParams.get('page')||'0',10)||0));
+  if(visualResult&&visualResult.page===samplePage&&Date.now()-visualResult.at<600000)return json(res,visualResult.data);
   if(visualScanRunning)return json(res,{error:'Visual scan in progress; retry shortly'},429);
   visualScanRunning=true;
   try{
-  const candidates=catalogue.filter(x=>/^image\/(png|jpeg|webp)/i.test(x.mime||'')&&Number(x.size||0)>0&&Number(x.size)<2*1048576).slice(0,12);
+  const candidates=catalogue.filter(x=>/^image\/(png|jpeg|webp)/i.test(x.mime||'')&&Number(x.size||0)>0&&Number(x.size)<2*1048576).slice(samplePage*12,samplePage*12+12);
   const hashes=[];
   for(const item of candidates){try{
    const source=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
@@ -266,7 +267,7 @@ async function handler(req,res){
    hashes.push({id:item.id,name:item.name,hash:bits});
   }catch(e){continue}}
   const groups=[];for(let i=0;i<hashes.length;i++)for(let j=i+1;j<hashes.length;j++){const a=hashes[i],b=hashes[j];let distance=0;for(let k=0;k<64;k++)if(a.hash[k]!==b.hash[k])distance++;if(distance<=7)groups.push({a:{id:a.id,name:a.name},b:{id:b.id,name:b.name},distance,confidence:'review-needed'});}
-  const result={inspected:hashes.length,limit:12,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'};visualResult={at:Date.now(),data:result};return json(res,result);
+  const result={inspected:hashes.length,limit:12,page:samplePage,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'};visualResult={at:Date.now(),page:samplePage,data:result};return json(res,result);
   }finally{visualScanRunning=false}
  }
  if(u.pathname==='/api/personal-sync'){
