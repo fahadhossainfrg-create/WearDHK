@@ -29,6 +29,7 @@ async function restoreDriveStats(){
  const id=process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID;if(!id)return;
  try{const result=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media')).json();
  if(!result||typeof result.counts!=='object'||Array.isArray(result.counts))throw Error('Unexpected statistics backup format');
+ titleOtp.restoreTitles(result.verifiedTitles);
  const incoming=Object.fromEntries(Object.entries(result.counts).filter(([id,n])=>id&&Number.isSafeInteger(n)&&n>=0));
  // Never replace newer local increments with an older Drive snapshot.
  for(const [key,value] of Object.entries(incoming))downloadCounts[key]=Math.max(Number(downloadCounts[key]||0),value);
@@ -39,12 +40,13 @@ async function restoreDriveStats(){
 }
 async function persistDriveStats(){
  const id=process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID;if(!id)return;
- const body={version:1,updatedAt:new Date().toISOString(),counts:downloadCounts};
+ const body={version:2,updatedAt:new Date().toISOString(),counts:downloadCounts,verifiedTitles:titleOtp.exportTitles()};
  const url='https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(id)+'?uploadType=media';
  const response=await fetch(url,{method:'PATCH',headers:{authorization:'Bearer '+await token(),'content-type':'application/json'},body:JSON.stringify(body)});
  if(!response.ok)throw Error('Drive backup HTTP '+response.status+': '+(await response.text()).slice(0,160));
  statsStorage.ready=true;statsStorage.error=null;statsStorage.lastSaved=body.updatedAt;
 }
+titleOtp.configurePersistence(async()=>{if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID)throw Error('Backup not configured');await writeQueue;await persistDriveStats()});
 function persistStatsQueued(){
  if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID)return;
  writeQueue=writeQueue.then(()=>persistDriveStats()).catch(e=>{statsStorage.ready=false;statsStorage.error=e.message;console.error('Could not save download counts to Drive:',e.message)});
