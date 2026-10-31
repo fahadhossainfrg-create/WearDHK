@@ -85,7 +85,11 @@ async function children(id){
  const data=await(await drive(u)).json();found.push(...(data.files||[]));next=data.nextPageToken||'';}while(next);return found;
 }
 const thumbnailFiles=new Map(),thumbnailRetry=new Map(),persistedThumbnailIds=new Set(),queuedThumbnailIds=new Set();
-const MAX_THUMBNAILS_IN_MEMORY=12,MAX_PREVIEWS_IN_MEMORY=20;
+const MAX_THUMBNAILS_IN_MEMORY=8,MAX_PREVIEWS_IN_MEMORY=16;
+const THUMBNAIL_INPUT_LIMIT=Math.max(4,Math.min(32,Number(process.env.THUMBNAIL_INPUT_LIMIT_MB||16)))*1024*1024;
+const THUMBNAIL_MEMORY_GUARD=Math.max(256,Math.min(460,Number(process.env.THUMBNAIL_MEMORY_GUARD_MB||380)))*1024*1024;
+const THUMBNAIL_PAUSE_MS=Math.max(250,Math.min(5000,Number(process.env.THUMBNAIL_PAUSE_MS||750)));
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function cacheThumbnail(id,value){
  if(thumbnailFiles.has(id))thumbnailFiles.delete(id);
  thumbnailFiles.set(id,value);
@@ -93,15 +97,21 @@ function cacheThumbnail(id,value){
  return value;
 }
 let thumbnailPreparationQueue=[],thumbnailPreparationRunning=false;
+const thumbnailWorker={current:'',prepared:0,failed:0,startedAt:null,lastPreparedAt:null,pausedForMemory:false};
+async function waitForThumbnailMemory(){
+ thumbnailWorker.pausedForMemory=false;
+ while(process.memoryUsage().rss>THUMBNAIL_MEMORY_GUARD){thumbnailWorker.pausedForMemory=true;await sleep(15000)}
+ thumbnailWorker.pausedForMemory=false;
+}
 async function refreshThumbnailIndex(){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
  try{const files=await children(folder);persistedThumbnailIds.clear();for(const file of files){const name=String(file.name||'');if(/\.webp$/i.test(name))persistedThumbnailIds.add(name.replace(/\.webp$/i,''));}}
  catch(e){console.warn('Could not refresh saved thumbnail index:',e.message)}
 }
 async function drainThumbnailQueue(){
- if(thumbnailPreparationRunning)return;thumbnailPreparationRunning=true;
- try{while(thumbnailPreparationQueue.length){const item=thumbnailPreparationQueue.shift();try{const preview=await getOrCreateThumbnail(item);if(preview.stored===false){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Thumbnail generated but not saved; retry scheduled:',item.id)}else{persistedThumbnailIds.add(item.id);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}finally{thumbnailFiles.delete(item.id);queuedThumbnailIds.delete(item.id)}}}
- finally{thumbnailPreparationRunning=false;if(thumbnailPreparationQueue.length)void drainThumbnailQueue();}
+ if(thumbnailPreparationRunning)return;thumbnailPreparationRunning=true;thumbnailWorker.startedAt=thumbnailWorker.startedAt||new Date().toISOString();
+ try{while(thumbnailPreparationQueue.length){await waitForThumbnailMemory();const item=thumbnailPreparationQueue.shift();thumbnailWorker.current=item.name;try{const preview=await getOrCreateThumbnail(item);if(preview.stored===false){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);thumbnailWorker.failed++;console.warn('Thumbnail generated but not saved; retry scheduled:',item.id)}else{persistedThumbnailIds.add(item.id);thumbnailRetry.delete(item.id);thumbnailWorker.prepared++;thumbnailWorker.lastPreparedAt=new Date().toISOString();console.log('Prepared preview for design:',item.name)}}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);thumbnailWorker.failed++;console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}finally{thumbnailFiles.delete(item.id);queuedThumbnailIds.delete(item.id);thumbnailWorker.current=''}await sleep(THUMBNAIL_PAUSE_MS)}}
+ finally{thumbnailPreparationRunning=false;thumbnailWorker.current='';thumbnailWorker.pausedForMemory=false;if(thumbnailPreparationQueue.length)void drainThumbnailQueue();}
 }
 function scheduleThumbnailPreparation(rows,previousIds){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
@@ -125,7 +135,7 @@ async function loadGeneratedThumbnail(sourceId){
 async function createDriveThumbnail(item){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)throw Error('GOOGLE_THUMBNAILS_FOLDER_ID is not configured');
  let bytes,sourceError;
- try{const original=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');const input=Buffer.from(await original.arrayBuffer());if(input.length>40*1024*1024)throw Error('Original exceeds thumbnail input limit');bytes=await sharp(input,{limitInputPixels:50000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
+ try{if(!/^image\//.test(item.mime||'')||Number(item.size||0)>THUMBNAIL_INPUT_LIMIT)throw Error('Using the Drive preview to protect server memory');const original=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');const input=Buffer.from(await original.arrayBuffer());if(input.length>THUMBNAIL_INPUT_LIMIT)throw Error('Original exceeds the safe thumbnail input limit');bytes=await sharp(input,{limitInputPixels:36000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:74}).toBuffer();}
  catch(e){sourceError=e;const metadata=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?fields=thumbnailLink&supportsAllDrives=true')).json();const link=item.thumbnail||metadata.thumbnailLink;if(!link)throw sourceError;const fallback=await fetch(link,{headers:{authorization:'Bearer '+await token()}});if(!fallback.ok)throw Error('Original preview failed ('+sourceError.message+'); Drive thumbnail HTTP '+fallback.status);const fallbackBytes=Buffer.from(await fallback.arrayBuffer());bytes=await sharp(fallbackBytes,{limitInputPixels:50000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
  const metadata={name:item.id+'.webp',mimeType:'image/webp',parents:[folder],appProperties:{wearDhkSourceId:item.id}};
  const form=new FormData();form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));form.append('file',new Blob([bytes],{type:'image/webp'}),metadata.name);
@@ -185,7 +195,7 @@ function requireSession(req,res,u){
  res.writeHead(303,{'location':'/login','cache-control':'no-store'});res.end();return false;
 }
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml'};
-function publicStatus(){return {duplicates:duplicateIds().size,count:catalogue.length,syncedAt,errors:errors.slice(0,15),scannedFolders,sourceStats,snapshotCount:snapshot.length,usingSnapshot:!syncedAt,complete:!!syncedAt&&!errors.length,syncing,syncStartedAt,statsStorage,connected:!!(process.env.GOOGLE_DRIVE_ACCESS_TOKEN||process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE),roots,interval,thumbnails:{saved:persistedThumbnailIds.size,queued:thumbnailPreparationQueue.length,retrying:thumbnailRetry.size,running:thumbnailPreparationRunning}}}
+function publicStatus(){const memory=process.memoryUsage(),queued=queuedThumbnailIds.size,retrying=thumbnailRetry.size,total=persistedThumbnailIds.size+queued+retrying;return {duplicates:duplicateIds().size,count:catalogue.length,syncedAt,errors:errors.slice(0,15),scannedFolders,sourceStats,snapshotCount:snapshot.length,usingSnapshot:!syncedAt,complete:!!syncedAt&&!errors.length,syncing,syncStartedAt,statsStorage,connected:!!(process.env.GOOGLE_DRIVE_ACCESS_TOKEN||process.env.GOOGLE_SERVICE_ACCOUNT_JSON||process.env.GOOGLE_SERVICE_ACCOUNT_FILE),roots,interval,memory:{rssMB:Math.round(memory.rss/1048576),heapMB:Math.round(memory.heapUsed/1048576),guardMB:Math.round(THUMBNAIL_MEMORY_GUARD/1048576),limitMB:Number(process.env.RENDER_MEMORY_LIMIT_MB||512)},thumbnails:{saved:persistedThumbnailIds.size,queued,retrying,running:thumbnailPreparationRunning,progress:total?Math.round(persistedThumbnailIds.size/total*100):100,current:thumbnailWorker.current,preparedThisRun:thumbnailWorker.prepared,failedThisRun:thumbnailWorker.failed,startedAt:thumbnailWorker.startedAt,lastPreparedAt:thumbnailWorker.lastPreparedAt,pausedForMemory:thumbnailWorker.pausedForMemory}}}
 function formatMatches(item,format){if(!format||format==='All')return true;const name=String(item.name||'').toLowerCase(),mime=String(item.mime||'').toLowerCase();if(format==='image')return mime.startsWith('image/')||/\.(png|jpe?g|webp|avif|tiff?)$/.test(name);if(format==='vector')return /\.(ai|eps|svg)$/.test(name);if(format==='pdf')return mime==='application/pdf'||name.endsWith('.pdf');if(format==='psd')return name.endsWith('.psd')||mime.includes('photoshop');return true}
 async function handler(req,res){
  const u=new URL(req.url,'http://localhost');
