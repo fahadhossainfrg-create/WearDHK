@@ -158,3 +158,6 @@ dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow-y:au
 @media(min-width:751px) and (max-width:1200px){.gallery{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:750px){.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.image-wrap{height:clamp(125px,38vw,185px)}.modal-actions>*{flex:1 1 140px;text-align:center}.leader-list{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:360px){.gallery{grid-template-columns:minmax(0,1fr)}.image-wrap{height:200px}}
+
+/* Keep the logo holder neutral against the navy sidebar. */
+.brand-logo{background:#f6f6f6!important;border:1px solid #dce2e4;border-radius:12px;padding:5px;}
