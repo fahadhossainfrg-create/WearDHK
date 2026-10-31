@@ -1,0 +1,6 @@
+/* Compact and dependable design navigation */
+#preview .modal-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+#preview .modal-actions>:not(#modalPrev):not(#modalNext){grid-column:1/-1;width:100%!important;min-width:0;box-sizing:border-box}
+#preview .modal-actions #modalPrev,#preview .modal-actions #modalNext{grid-column:auto!important;display:flex!important;align-items:center;justify-content:center;width:100%!important;min-width:0!important;max-width:none!important;min-height:42px!important;height:44px!important;padding:8px!important;font-size:22px!important;line-height:1!important;border-radius:11px!important}
+#preview .modal-actions #modalPrev:disabled,#preview .modal-actions #modalNext:disabled{opacity:.4;cursor:not-allowed}
+@media(min-width:850px){#preview .modal-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
