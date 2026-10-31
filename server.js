@@ -15,6 +15,7 @@ const port=Number(process.env.PORT||portArg||3000),interval=Math.max(1,Number(pr
 let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
 let visualResult=null,visualScanRunning=false;
+const syncAuthAttempts=new Map();
 const downloadsPath=path.join(__dirname,'download-counts.json');
 let personalSync={favourites:[],boards:[],updatedAt:null};
 let downloadCounts={};try{const parsed=JSON.parse(fs.readFileSync(downloadsPath,'utf8'));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))downloadCounts=parsed}catch{}
@@ -255,17 +256,17 @@ async function handler(req,res){
   if(visualScanRunning)return json(res,{error:'Visual scan in progress; retry shortly'},429);
   visualScanRunning=true;
   try{
-  const candidates=catalogue.filter(x=>/^image\/(png|jpeg|webp)/i.test(x.mime||'')&&Number(x.size||0)>0&&Number(x.size)<8*1048576).slice(0,24);
+  const candidates=catalogue.filter(x=>/^image\/(png|jpeg|webp)/i.test(x.mime||'')&&Number(x.size||0)>0&&Number(x.size)<2*1048576).slice(0,12);
   const hashes=[];
   for(const item of candidates){try{
    const source=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
-   const buf=Buffer.from(await source.arrayBuffer());if(buf.length>8*1048576)continue;
+   const buf=Buffer.from(await source.arrayBuffer());if(buf.length>2*1048576)continue;
    const raw=await sharp(buf,{limitInputPixels:24000000}).resize(9,8,{fit:'fill'}).greyscale().raw().toBuffer();
    let bits='';for(let y=0;y<8;y++)for(let x=0;x<8;x++)bits+=raw[y*9+x]>raw[y*9+x+1]?'1':'0';
    hashes.push({id:item.id,name:item.name,hash:bits});
   }catch(e){continue}}
   const groups=[];for(let i=0;i<hashes.length;i++)for(let j=i+1;j<hashes.length;j++){const a=hashes[i],b=hashes[j];let distance=0;for(let k=0;k<64;k++)if(a.hash[k]!==b.hash[k])distance++;if(distance<=7)groups.push({a:{id:a.id,name:a.name},b:{id:b.id,name:b.name},distance,confidence:'review-needed'});}
-  const result={inspected:hashes.length,limit:24,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'};visualResult={at:Date.now(),data:result};return json(res,result);
+  const result={inspected:hashes.length,limit:12,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'};visualResult={at:Date.now(),data:result};return json(res,result);
   }finally{visualScanRunning=false}
  }
  if(u.pathname==='/api/personal-sync'){
@@ -273,9 +274,12 @@ async function handler(req,res){
   if(req.method!=='POST')return json(res,{error:'Use POST'},405);
   let raw='';try{for await(const chunk of req){raw+=chunk;if(raw.length>50000)return json(res,{error:'Payload too large'},413)}}catch{return json(res,{error:'Invalid request'},400)}
   let request;try{request=JSON.parse(raw)}catch{return json(res,{error:'Invalid JSON'},400)}
+  const ip=String(req.socket.remoteAddress||'unknown');const authKey=crypto.createHash('sha256').update(ip).digest('hex');const auth=syncAuthAttempts.get(authKey)||{failures:0,until:0};
+  if(auth.until>Date.now())return json(res,{error:'Too many incorrect attempts. Please retry later.'},429);
   const expected=process.env.TITLE_EDIT_PASSWORD||'',provided=String(request.password||'');
   const ha=crypto.createHash('sha256').update(expected).digest(),hb=crypto.createHash('sha256').update(provided).digest();
-  if(!expected||!crypto.timingSafeEqual(ha,hb))return json(res,{error:'Invalid administrator password'},403);
+  if(!expected||!crypto.timingSafeEqual(ha,hb)){const failures=auth.failures+1;syncAuthAttempts.set(authKey,{failures:failures>=5?0:failures,until:failures>=5?Date.now()+900000:0});return json(res,{error:'Invalid administrator password'},403)}
+  syncAuthAttempts.delete(authKey);
   if(request.action==='load')return json(res,{personalSync});
   if(request.action!=='save')return json(res,{error:'Unknown action'},400);
   const incoming=request.personalSync;
