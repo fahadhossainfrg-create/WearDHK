@@ -1,0 +1,16 @@
+/* Final compact form controls — consistent across gallery and preview */
+:root{--wd-field-height:42px;--wd-compact-radius:10px}
+#preview .wd-review-panel{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:12px!important;padding:14px!important;margin:0!important;width:100%!important;max-width:100%!important}
+#preview .wd-review-panel>strong,#preview .wd-review-panel>label,#preview .wd-review-panel>div,#preview .wd-review-panel>small{grid-column:1/-1!important;min-width:0!important}
+#preview .wd-review-panel label{display:grid!important;gap:5px!important;margin:0!important;font-size:12px!important;font-weight:500!important;line-height:1.4!important}
+#preview .wd-review-panel :is(input,select,textarea),#preview .wd-otp-panel input{width:100%!important;min-width:0!important;max-width:100%!important;height:var(--wd-field-height)!important;min-height:var(--wd-field-height)!important;max-height:var(--wd-field-height)!important;padding:8px 12px!important;font-size:14px!important;line-height:1.3!important;border-radius:var(--wd-compact-radius)!important;box-sizing:border-box!important}
+#preview .wd-review-panel :is(input,select,textarea)::placeholder{font-size:13px!important}
+#preview .wd-review-panel>div:has(>button){display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;width:100%!important}
+#preview .wd-review-panel>div>button,#preview .wd-otp-panel button{width:100%!important;max-width:100%!important;min-width:0!important;min-height:42px!important;height:auto!important;padding:10px 12px!important;font-size:12px!important;font-weight:650!important;line-height:1.35!important;white-space:normal!important;overflow-wrap:anywhere!important;text-align:center!important;border-radius:10px!important}
+#preview .wd-otp-panel{width:100%!important;min-width:0!important;max-width:100%!important;gap:10px!important}
+#preview .wd-otp-panel p,#preview .wd-review-panel small{font-size:11px!important;line-height:1.5!important}
+#preview .wd-editor-details>summary{min-height:46px!important;height:auto!important;padding:12px 14px!important;font-size:13px!important}
+#preview .metadata-grid>span{min-height:62px!important;height:auto!important;padding:10px 12px!important}
+#preview .metadata-grid small{font-size:9px!important}
+#preview .metadata-grid strong{font-size:12px!important;line-height:1.3!important}
+@media(max-width:650px){#preview .wd-review-panel{padding:12px!important;gap:11px!important}#preview .wd-review-panel>div:has(>button){grid-template-columns:minmax(0,1fr)!important}}
