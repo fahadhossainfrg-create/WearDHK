@@ -1,0 +1,25 @@
+/* Mobile preview overflow correction — Nov 2026 */
+#preview,#preview .modal-info,#preview .wd-review-panel,#preview .wd-related{box-sizing:border-box;min-width:0;max-width:100%}
+#preview{width:min(670px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow-x:hidden;overflow-y:auto}
+#preview .modal-info{width:100%;min-width:0;overflow-x:hidden}
+#preview .wd-review-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;min-width:0;max-width:100%;overflow-wrap:anywhere}
+#preview .wd-review-panel label{min-width:0;width:100%;max-width:100%;overflow-wrap:anywhere}
+#preview .wd-review-panel input,#preview .wd-review-panel select{display:block;width:100%;max-width:100%;min-width:0;font-size:16px}
+#preview .wd-review-panel>div{min-width:0;max-width:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
+#preview .wd-review-panel>div>button{min-width:0;max-width:100%;flex:1 1 160px;white-space:normal;overflow-wrap:anywhere;text-align:center}
+#preview .wd-review-panel>small{display:block;max-width:100%;overflow-wrap:anywhere}
+#preview .wd-otp-panel{grid-column:1/-1;display:grid!important;grid-template-columns:minmax(0,1fr);align-items:stretch;gap:10px;max-width:100%;min-width:0}
+#preview .wd-otp-panel p{margin:0;white-space:normal;overflow-wrap:anywhere}
+#preview .wd-otp-panel input,#preview .wd-otp-panel button{width:100%;max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere}
+#preview .wd-related{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+#preview .wd-related button{display:block;width:100%;max-width:100%;min-width:0;text-align:left;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45}
+#preview #modalTitle,#preview #modalPath{overflow-wrap:anywhere;word-break:break-word}
+@media(max-width:650px){
+ #preview{width:calc(100vw - 20px);max-width:calc(100vw - 20px);border-radius:16px}
+ #preview .modal-info{padding:18px 14px}
+ #preview .wd-review-panel{grid-template-columns:minmax(0,1fr);padding:14px 12px;gap:12px}
+ #preview .wd-review-panel>strong,#preview .wd-review-panel>div,#preview .wd-review-panel>small{grid-column:1}
+ #preview .wd-review-panel>div>button{flex:1 1 100%;width:100%}
+ #preview .modal-actions>*{flex:1 1 100%;max-width:100%;white-space:normal}
+ #preview .wd-related button{font-size:12px;padding:11px 12px}
+}
