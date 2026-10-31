@@ -16,6 +16,7 @@ let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-
 const previewCache=new Map();
 let visualResult=null,visualScanRunning=false;
 const downloadsPath=path.join(__dirname,'download-counts.json');
+let personalSync={favourites:[],boards:[],updatedAt:null};
 let downloadCounts={};try{const parsed=JSON.parse(fs.readFileSync(downloadsPath,'utf8'));if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))downloadCounts=parsed}catch{}
 function saveDownloads(){try{const tmp=downloadsPath+'.tmp';fs.writeFileSync(tmp,JSON.stringify(downloadCounts));fs.renameSync(tmp,downloadsPath)}catch(e){console.warn('Download tracking is runtime-only:',e.message)}}
 function downloadTotal(){return Object.values(downloadCounts).reduce((total,n)=>total+(Number(n)||0),0)}
@@ -32,6 +33,7 @@ async function restoreDriveStats(){
  try{const result=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media')).json();
  if(!result||typeof result.counts!=='object'||Array.isArray(result.counts))throw Error('Unexpected statistics backup format');
  titleOtp.restoreTitles(result.verifiedTitles);
+ if(result.personalSync&&Array.isArray(result.personalSync.favourites)&&Array.isArray(result.personalSync.boards))personalSync=result.personalSync;
  const incoming=Object.fromEntries(Object.entries(result.counts).filter(([id,n])=>id&&Number.isSafeInteger(n)&&n>=0));
  // Never replace newer local increments with an older Drive snapshot.
  for(const [key,value] of Object.entries(incoming))downloadCounts[key]=Math.max(Number(downloadCounts[key]||0),value);
@@ -42,7 +44,7 @@ async function restoreDriveStats(){
 }
 async function persistDriveStats(){
  const id=process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID;if(!id)return;
- const body={version:2,updatedAt:new Date().toISOString(),counts:downloadCounts,verifiedTitles:titleOtp.exportTitles()};
+ const body={version:2,updatedAt:new Date().toISOString(),counts:downloadCounts,verifiedTitles:titleOtp.exportTitles(),personalSync};
  const url='https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(id)+'?uploadType=media';
  const response=await fetch(url,{method:'PATCH',headers:{authorization:'Bearer '+await token(),'content-type':'application/json'},body:JSON.stringify(body)});
  if(!response.ok)throw Error('Drive backup HTTP '+response.status+': '+(await response.text()).slice(0,160));
@@ -265,6 +267,24 @@ async function handler(req,res){
   const groups=[];for(let i=0;i<hashes.length;i++)for(let j=i+1;j<hashes.length;j++){const a=hashes[i],b=hashes[j];let distance=0;for(let k=0;k<64;k++)if(a.hash[k]!==b.hash[k])distance++;if(distance<=7)groups.push({a:{id:a.id,name:a.name},b:{id:b.id,name:b.name},distance,confidence:'review-needed'});}
   const result={inspected:hashes.length,limit:24,groups:groups.slice(0,30),disclaimer:'Perceptual-hash suggestions from a bounded sample only. Verify each match visually; no files are moved or deleted.'};visualResult={at:Date.now(),data:result};return json(res,result);
   }finally{visualScanRunning=false}
+ }
+ if(u.pathname==='/api/personal-sync'){
+  if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID||!statsStorage.ready)return json(res,{error:'Persistent Drive backup unavailable'},503);
+  if(req.method!=='POST')return json(res,{error:'Use POST'},405);
+  let raw='';try{for await(const chunk of req){raw+=chunk;if(raw.length>50000)return json(res,{error:'Payload too large'},413)}}catch{return json(res,{error:'Invalid request'},400)}
+  let request;try{request=JSON.parse(raw)}catch{return json(res,{error:'Invalid JSON'},400)}
+  const expected=process.env.TITLE_EDIT_PASSWORD||'',provided=String(request.password||'');
+  const ha=crypto.createHash('sha256').update(expected).digest(),hb=crypto.createHash('sha256').update(provided).digest();
+  if(!expected||!crypto.timingSafeEqual(ha,hb))return json(res,{error:'Invalid administrator password'},403);
+  if(request.action==='load')return json(res,{personalSync});
+  if(request.action!=='save')return json(res,{error:'Unknown action'},400);
+  const incoming=request.personalSync;
+  if(!incoming||!Array.isArray(incoming.favourites)||!Array.isArray(incoming.boards)||incoming.favourites.length>10000||incoming.boards.length>100)return json(res,{error:'Invalid backup format'},400);
+  const favourites=incoming.favourites.filter(x=>typeof x==='string'&&x.length<160).slice(0,10000);
+  const boards=incoming.boards.filter(b=>b&&typeof b.id==='string'&&typeof b.name==='string'&&Array.isArray(b.items)).slice(0,100).map(b=>({id:b.id.slice(0,80),name:b.name.slice(0,80),items:b.items.filter(id=>typeof id==='string'&&id.length<160).slice(0,1000)}));
+  const previous=personalSync;personalSync={favourites,boards,updatedAt:new Date().toISOString()};
+  const job=writeQueue.then(()=>persistDriveStats());writeQueue=job.catch(()=>{});
+  try{await job;return json(res,{saved:true,updatedAt:personalSync.updatedAt})}catch(e){personalSync=previous;return json(res,{error:'Drive backup write failed; preferences not saved'},503)}
  }
  if(u.pathname==='/api/duplicate-candidates'){
   const groups=new Map(),exact=duplicateIds();const compact=v=>String(v||'').toLowerCase().replace(/\.(png|jpe?g|webp|ai|eps|svg|pdf|psd)$/,'').replace(/\b(copy|final|v\d+|duplicate|new|design|artwork|\d+)\b/g,' ').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim();
