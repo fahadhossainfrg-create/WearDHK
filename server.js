@@ -1,6 +1,9 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const sharp=require('sharp');
+// Keep thumbnail generation within the 512 MiB Render instance.
+sharp.cache(false);
+sharp.concurrency(1);
 const roots=[
  {id:'128JL_dyiO2xFXaRKh4zj8al5w2Y6XoNP',name:'Main Library'},
  {id:'1QImLRpunvmjkhHc8_CqewTw7u6lqvoLb',name:'Organised Library'},
@@ -81,6 +84,13 @@ async function children(id){
  const data=await(await drive(u)).json();found.push(...(data.files||[]));next=data.nextPageToken||'';}while(next);return found;
 }
 const thumbnailFiles=new Map(),thumbnailRetry=new Map(),persistedThumbnailIds=new Set(),queuedThumbnailIds=new Set();
+const MAX_THUMBNAILS_IN_MEMORY=12,MAX_PREVIEWS_IN_MEMORY=20;
+function cacheThumbnail(id,value){
+ if(thumbnailFiles.has(id))thumbnailFiles.delete(id);
+ thumbnailFiles.set(id,value);
+ while(thumbnailFiles.size>MAX_THUMBNAILS_IN_MEMORY)thumbnailFiles.delete(thumbnailFiles.keys().next().value);
+ return value;
+}
 let thumbnailPreparationQueue=[],thumbnailPreparationRunning=false;
 async function refreshThumbnailIndex(){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
@@ -89,7 +99,7 @@ async function refreshThumbnailIndex(){
 }
 async function drainThumbnailQueue(){
  if(thumbnailPreparationRunning)return;thumbnailPreparationRunning=true;
- try{while(thumbnailPreparationQueue.length){const item=thumbnailPreparationQueue.shift();try{const preview=await getOrCreateThumbnail(item);if(preview.stored===false){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Thumbnail generated but not saved; retry scheduled:',item.id)}else{persistedThumbnailIds.add(item.id);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}}catch(e){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}finally{queuedThumbnailIds.delete(item.id)}}}
+ try{while(thumbnailPreparationQueue.length){const item=thumbnailPreparationQueue.shift();try{const preview=await getOrCreateThumbnail(item);if(preview.stored===false){thumbnailFiles.delete(item.id);thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Thumbnail generated but not saved; retry scheduled:',item.id)}else{persistedThumbnailIds.add(item.id);thumbnailRetry.delete(item.id);console.log('Prepared preview for design:',item.name)}}catch(e){thumbnailRetry.set(item.id,Date.now()+30*60*1000);console.warn('Could not create Drive thumbnail; retry scheduled:',item.id,e.message)}finally{thumbnailFiles.delete(item.id);queuedThumbnailIds.delete(item.id)}}}
  finally{thumbnailPreparationRunning=false;if(thumbnailPreparationQueue.length)void drainThumbnailQueue();}
 }
 function scheduleThumbnailPreparation(rows,previousIds){
@@ -124,8 +134,8 @@ async function createDriveThumbnail(item){
 }
 async function getOrCreateThumbnail(item){
  if(thumbnailFiles.has(item.id))return thumbnailFiles.get(item.id);
- const existing=await loadGeneratedThumbnail(item.id);if(existing){thumbnailFiles.set(item.id,existing);return existing}
- const generated=await createDriveThumbnail(item);thumbnailFiles.set(item.id,generated);return generated;
+ const existing=await loadGeneratedThumbnail(item.id);if(existing)return cacheThumbnail(item.id,existing);
+ const generated=await createDriveThumbnail(item);return cacheThumbnail(item.id,generated);
 }
 async function sync(){
  if(syncing)return false;syncing=true;syncStartedAt=new Date().toISOString();const rows=[],failures=[],seen=new Set(),stats=Object.fromEntries(roots.map(x=>[x.name,{files:0,folders:0,errors:0}]));let count=0;
@@ -242,7 +252,7 @@ async function handler(req,res){
   }catch(e){console.warn('Full image preview failed; trying thumbnail:',id,e.message)}
   if(!image){try{image=await requestThumbnail()}catch(e){console.warn('Thumbnail unavailable:',id,e.message);return json(res,{error:'Cannot generate preview for this file',driveUrl:item.url},502)}}
   if(image.bytes.length>15*1024*1024)return json(res,{error:'Preview exceeds size limit'},413);
-  if(image.bytes.length<=2*1024*1024){if(previewCache.size>=100)previewCache.delete(previewCache.keys().next().value);previewCache.set(cacheKey,{image,expires:Date.now()+10*60*1000})}
+  if(image.bytes.length<=2*1024*1024){if(previewCache.has(cacheKey))previewCache.delete(cacheKey);while(previewCache.size>=MAX_PREVIEWS_IN_MEMORY)previewCache.delete(previewCache.keys().next().value);previewCache.set(cacheKey,{image,expires:Date.now()+10*60*1000})}
   res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':'private,max-age=900','x-content-type-options':'nosniff'});
   return res.end(image.bytes);
  }
