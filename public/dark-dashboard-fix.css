@@ -9,3 +9,5 @@ html[data-theme="dark"] .stat *{text-shadow:none!important}
 html[data-theme="light"] #wd-theme-toggle::before{background:#f4f7ff;box-shadow:0 0 0 3px #b6c8d533,0 0 7px 2px #9bb2c766}
 @keyframes wd-light-pulse{0%,100%{opacity:.55;box-shadow:0 0 3px 1px #ffffff66}50%{opacity:1;box-shadow:0 0 13px 4px #ffffffbb}}
 @media(prefers-reduced-motion:reduce){#wd-theme-toggle::before{animation:none}}
+
+html[data-theme="dark"] .leader,html[data-theme="dark"] .leader-preview{background:#263b48!important;color:#f1f6f8!important;border-color:#506c7b!important}html[data-theme="dark"] .download-leaders h3,html[data-theme="dark"] .download-leaders p,html[data-theme="dark"] .leader :is(span,strong),html[data-theme="dark"] .stat :is(span,strong,small){color:#f1f6f8!important}html[data-theme="dark"] .stat small,html[data-theme="dark"] .download-leaders p{color:#bdced9!important}
