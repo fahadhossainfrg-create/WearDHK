@@ -5,6 +5,7 @@ let titles={};try{titles=JSON.parse(fs.readFileSync(file,'utf8'))}catch{}
 const failures=new Map();
 let persistTitles=null;
 let storageReady=false;
+let savingTitle=false;
 function reply(res,status,data){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(data))}
 async function parse(req){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)throw Error('Request too large')}return JSON.parse(raw)}
 function save(){const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(titles));fs.renameSync(tmp,file)}
@@ -30,8 +31,11 @@ async function route(req,res,u,catalogue){
   }
   failures.delete(rateKey);
   if(!persistTitles||!storageReady){reply(res,503,{error:'Persistent title backup is not ready. No changes were saved.'});return true}
+  if(savingTitle){reply(res,409,{error:'Another title change is being saved. Please retry shortly.'});return true}
+  savingTitle=true;
   const before=titles[id];titles[id]=title;
   try{await persistTitles();save()}catch(e){if(before===undefined)delete titles[id];else titles[id]=before;reply(res,503,{error:'Could not persist title to Google Drive backup. No changes were saved.'});return true}
+  finally{savingTitle=false}
   reply(res,200,{verified:true,id,title});return true
  }catch(e){reply(res,500,{error:'Could not save title'});return true}
 }
