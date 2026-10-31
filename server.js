@@ -55,7 +55,7 @@ async function token(){
  if(tokenCache.token&&Date.now()<tokenCache.expiry-90000)return tokenCache.token;
  const raw=process.env.GOOGLE_SERVICE_ACCOUNT_JSON||(process.env.GOOGLE_SERVICE_ACCOUNT_FILE?fs.readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT_FILE,'utf8'):null);
  if(!raw)throw Error('Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE and share the configured folders with its service-account email.');
- const sa=JSON.parse(raw),now=Math.floor(Date.now()/1000);
+ const sa=JSON.parse(raw);console.log('Drive service account email:',sa.client_email);const now=Math.floor(Date.now()/1000);
  const signed=encode({alg:'RS256',typ:'JWT'})+'.'+encode({iss:sa.client_email,scope:process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID?'https://www.googleapis.com/auth/drive':'https://www.googleapis.com/auth/drive.readonly',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600});
  const signature=crypto.sign('RSA-SHA256',Buffer.from(signed),sa.private_key).toString('base64url');
  const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion:signed+'.'+signature})});
