@@ -308,7 +308,7 @@ async function handler(req,res){
   };
   const thumbOnly=u.searchParams.get('thumb')==='1',cacheKey=id+(thumbOnly?':thumb':':full');
   const cached=previewCache.get(cacheKey);let image=cached&&cached.expires>Date.now()?cached.image:null;
-  if(!image&&thumbOnly){try{image=await requestThumbnail()}catch(e){console.warn('Quick thumbnail unavailable; trying original:',id,e.message)}}
+  if(!image&&thumbOnly){if(/^image\/(png|jpeg|webp)$/i.test(item.mime||'')&&Number(item.size)>0&&Number(item.size)<=3*1024*1024){try{const original=await drive(media);const bytes=Buffer.from(await original.arrayBuffer());if(bytes.length<=3*1024*1024)image={bytes,mime:item.mime}}catch(e){console.warn('Quick original preview unavailable:',id,e.message)}}if(!image){try{image=await requestThumbnail()}catch(e){console.warn('Quick thumbnail unavailable; trying original:',id,e.message)}}}
   if(!image)try{
     if(/^image\//.test(item.mime||'') && item.size<=12*1024*1024){
       const response=await drive(media);
