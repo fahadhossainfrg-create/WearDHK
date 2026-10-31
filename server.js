@@ -77,7 +77,7 @@ async function loadGeneratedThumbnail(sourceId){
  const query=new URL('https://www.googleapis.com/drive/v3/files');
  query.searchParams.set('q',"'"+folder+"' in parents and appProperties has { key='wearDhkSourceId' and value='"+sourceId+"' } and trashed = false");
  query.searchParams.set('fields','files(id,name,mimeType)');query.searchParams.set('pageSize','1');query.searchParams.set('supportsAllDrives','true');query.searchParams.set('includeItemsFromAllDrives','true');
- const data=await(await drive(query)).json();const file=data.files?.[0];if(!file)return null;
+ const data=await(await drive(query)).json();let file=data.files?.[0];if(!file){const byName=new URL('https://www.googleapis.com/drive/v3/files');byName.searchParams.set('q',"'"+folder+"' in parents and name='"+sourceId+".webp' and trashed = false");byName.searchParams.set('fields','files(id,name,mimeType)');byName.searchParams.set('pageSize','1');byName.searchParams.set('supportsAllDrives','true');byName.searchParams.set('includeItemsFromAllDrives','true');const named=await(await drive(byName)).json();file=named.files?.[0];}if(!file)return null;
  const response=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(file.id)+'?alt=media&supportsAllDrives=true');
  return {bytes:Buffer.from(await response.arrayBuffer()),mime:file.mimeType||'image/webp',driveThumbnailId:file.id};
 }
