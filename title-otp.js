@@ -37,3 +37,5 @@ module.exports=async(req,res,u,catalogue)=>{
   send(res,200,{verified:true,id,title});return true
  }catch(e){send(res,500,{error:e.message==='Request too large'?'Request too large':'Unable to complete verification'});return true}
 };
+
+module.exports.titleFor=id=>titles[id]||null;
