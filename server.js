@@ -14,7 +14,7 @@ const portArgIndex=process.argv.indexOf('--port'),portArg=portArgIndex>=0?proces
 const port=Number(process.env.PORT||portArg||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(5,Math.min(30,Number(process.env.SYNC_CONCURRENCY||20)));
 let snapshot=[];try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort();const records=names.flatMap(n=>{const v=JSON.parse(fs.readFileSync(path.join(__dirname,n),'utf8'));return Array.isArray(v)?v:[]});snapshot=[...new Map(records.map(x=>[x.id,x])).values()];console.log('Persistent catalogue files:',names.length)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
-let visualResult=null,visualScanRunning=false,aiClassifyRunning=false;
+let visualResult=null,visualScanRunning=false,aiClassifyRunning=false,aiLastRequest=0;
 const visualHashIndex=new Map();
 const syncAuthAttempts=new Map();
 const downloadsPath=path.join(__dirname,'download-counts.json');
@@ -261,7 +261,8 @@ async function handler(req,res){
   if(!expected||typeof data.password!=='string'||!crypto.timingSafeEqual(crypto.createHash('sha256').update(data.password).digest(),crypto.createHash('sha256').update(expected).digest()))return json(res,{error:'Administrator password required'},403);
   const item=catalogue.find(x=>x.id===data.id);if(!item)return json(res,{error:'Design not found'},404);
   if(!/^image\/(png|jpeg|webp)$/i.test(item.mime||'')||Number(item.size)>1500000)return json(res,{error:'Only PNG, JPG or WEBP images under 1.5 MB are supported'},422);
-  if(aiClassifyRunning)return json(res,{error:'Another classification is running'},429);
+  if(aiClassifyRunning||Date.now()-aiLastRequest<30000)return json(res,{error:'AI classification is limited to one request every 30 seconds'},429);
+  aiLastRequest=Date.now();
   aiClassifyRunning=true;
   try{
    const imageResponse=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');
