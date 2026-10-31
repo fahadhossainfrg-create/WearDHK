@@ -1,0 +1,22 @@
+/* Layout repair: one ownership layer for the responsive gallery controls */
+.toolbar{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;position:relative!important}
+.toolbar .search-shell{grid-column:1/-1!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important;width:100%!important;min-width:0!important;position:relative!important}
+.toolbar .search-shell>.search{display:flex!important;align-items:center!important;gap:6px!important;min-width:0!important;width:auto!important;max-width:100%!important;height:42px!important;padding:0 11px!important;border:1px solid #637780!important;border-radius:11px!important;overflow:hidden!important;box-sizing:border-box!important}
+.toolbar .search-shell>.search>input{display:block!important;position:static!important;flex:1 1 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;height:100%!important;margin:0!important;padding:0 4px!important;border:0!important;outline-offset:-3px!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;font:inherit!important;font-size:12px!important}
+.toolbar .search-shell>#wd-search-submit{height:42px!important;width:auto!important;min-width:83px!important;max-width:100px!important;padding:0 13px!important}
+.toolbar #category,.toolbar #format,.toolbar #sort{width:100%!important;min-width:0!important;height:42px!important}
+.toolbar .clear-filters{grid-column:1/-1!important;height:42px!important}
+.quickbar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:10px!important;align-items:center!important;min-width:0!important;max-width:100%!important}
+.quick-filters{display:flex!important;min-width:0!important;width:100%!important;max-width:100%!important;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;gap:7px!important;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.quick-filters::-webkit-scrollbar{display:none}
+.quick-filters .chip{flex:0 0 auto!important}
+.view-switch{flex:0 0 auto!important;position:static!important;max-width:100%!important;display:flex!important}
+.wd-extras>.wd-advanced,.wd-advanced{padding:0 12px!important;min-height:0!important;height:auto!important;overflow:visible!important}
+.wd-extras>.wd-advanced>summary,.wd-advanced>summary{min-height:43px!important;height:43px!important;padding:0!important;align-items:center!important;display:flex!important;cursor:pointer}
+.wd-extras>.wd-advanced:not([open]),.wd-advanced:not([open]){max-height:47px!important}
+.wd-quick-actions{display:flex!important;flex-wrap:wrap!important;gap:7px!important;align-items:center!important;min-width:0!important;max-width:100%!important}
+.wd-quick-actions>*{min-width:0!important;max-width:100%!important}
+.wd-quick-actions #wd-newest,.wd-quick-actions #wd-select{height:36px!important;min-height:36px!important;max-width:100%!important;flex:0 1 auto!important;white-space:normal!important;line-height:1.15!important;padding:7px 9px!important}
+.back-top{right:12px!important;bottom:calc(90px + env(safe-area-inset-bottom,0px))!important;z-index:8!important;width:42px!important;height:42px!important}
+@media(max-width:650px){.quickbar{grid-template-columns:minmax(0,1fr) auto!important}.view-switch{padding:5px!important;gap:2px!important}.view-switch .view-btn{min-width:32px!important;width:34px!important;padding:6px!important}.toolbar .search-shell .search input{font-size:12px!important}.wd-quick-actions .wd-inline-label{width:auto!important}.wd-status-summary{width:100%!important}}
+@media(min-width:800px){.toolbar{grid-template-columns:minmax(0,2fr) repeat(3,minmax(120px,1fr)) auto!important}.toolbar .search-shell{grid-column:auto!important}.toolbar .clear-filters{grid-column:auto!important}}
