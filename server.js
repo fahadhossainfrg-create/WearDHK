@@ -1,6 +1,7 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const sharp=require('sharp');
+const titleOtp=require('./title-otp');
 // Keep thumbnail generation within the 512 MiB Render instance.
 sharp.cache(false);
 sharp.concurrency(1);
@@ -199,6 +200,7 @@ function publicStatus(){const memory=process.memoryUsage(),queued=queuedThumbnai
 function formatMatches(item,format){if(!format||format==='All')return true;const name=String(item.name||'').toLowerCase(),mime=String(item.mime||'').toLowerCase();if(format==='image')return mime.startsWith('image/')||/\.(png|jpe?g|webp|avif|tiff?)$/.test(name);if(format==='vector')return /\.(ai|eps|svg)$/.test(name);if(format==='pdf')return mime==='application/pdf'||name.endsWith('.pdf');if(format==='psd')return name.endsWith('.psd')||mime.includes('photoshop');return true}
 async function handler(req,res){
  const u=new URL(req.url,'http://localhost');
+ if(await titleOtp(req,res,u,catalogue)!==false)return;
  if(u.pathname==='/healthz'){const memory=process.memoryUsage();return json(res,{status:'ok',timestamp:new Date().toISOString(),uptimeSeconds:Math.round(process.uptime()),catalogueCount:catalogue.length,memoryMB:Math.round(memory.rss/1048576),thumbnailWorker:thumbnailPreparationRunning?'running':'idle'})}
  if(u.pathname==='/login'){
   if(req.method==='GET'){res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"});return res.end(loginHtml());}
