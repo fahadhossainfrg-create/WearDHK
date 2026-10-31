@@ -46,7 +46,7 @@ async function persistDriveStats(){
  if(!response.ok)throw Error('Drive backup HTTP '+response.status+': '+(await response.text()).slice(0,160));
  statsStorage.ready=true;statsStorage.error=null;statsStorage.lastSaved=body.updatedAt;
 }
-titleOtp.configurePersistence(async()=>{if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID)throw Error('Backup not configured');await writeQueue;await persistDriveStats()});
+titleOtp.configurePersistence(async()=>{if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID)throw Error('Backup not configured');const operation=writeQueue.then(()=>persistDriveStats());writeQueue=operation.catch(e=>{statsStorage.ready=false;statsStorage.error=e.message;throw e});try{await writeQueue}finally{writeQueue=writeQueue.catch(()=>{})}});
 function persistStatsQueued(){
  if(!process.env.GOOGLE_DOWNLOAD_STATS_FILE_ID)return;
  writeQueue=writeQueue.then(()=>persistDriveStats()).catch(e=>{statsStorage.ready=false;statsStorage.error=e.message;console.error('Could not save download counts to Drive:',e.message)});
