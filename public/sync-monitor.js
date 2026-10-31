@@ -20,12 +20,12 @@
    }
    const last=history[history.length-1];
    if(last?.syncedAt===status.syncedAt){render();return}
-   const ids=[];
+   if(status.count>15000){$('wd-sync-summary').textContent='Catalogue too large for browser comparison; complete scan: '+status.count+' designs.';return}\n   const ids=[];
    for(let page=1;page<=Math.ceil(status.count/120);page++){
     const q=new URLSearchParams({source:'All',category:'All',format:'All',sort:'newest',view:'all',page:String(page),limit:'120'});
     const r=await fetch('/api/designs?'+q,{cache:'no-store'});if(!r.ok)throw Error('Catalogue page unavailable');
     const body=await r.json();ids.push(...body.items.map(x=>x.id));
-    if(page%20===0)await sleep(0);
+    if(page%10===0)await sleep(25);
    }
    // Include exact duplicates from a separate view so IDs represent the complete library.
    for(let page=1;page<=Math.ceil(Number(status.duplicates||0)/120);page++){
@@ -39,8 +39,8 @@
    const added=previous?unique.filter(id=>!previous.has(id)):[];
    const missing=previous?last.ids.filter(id=>!current.has(id)):[];
    history.push({syncedAt:status.syncedAt,recordedAt:new Date().toISOString(),count:unique.length,added,missing,ids:unique});
-   history=history.slice(-8);
-   try{localStorage.setItem(key,JSON.stringify(history))}catch{history=history.slice(-2)}
+   history=history.slice(-3);
+   try{localStorage.setItem(key,JSON.stringify(history))}catch{history=history.slice(-1)}
    render();
   }catch(e){$('wd-sync-summary').textContent='Change comparison unavailable: '+e.message}
   finally{running=false}
