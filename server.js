@@ -111,7 +111,7 @@ async function sync(){
  stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink,thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
  }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));scannedFolders=count;sourceStats=stats;}
  if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
- const newlyAdded=rows.filter(x=>!previousIds.has(x.id)&&/^image\\//.test(x.mime||''));
+ const newlyAdded=rows.filter(x=>!previousIds.has(x.id)&&/^image\//.test(x.mime||''));
  if(newlyAdded.length&&process.env.GOOGLE_THUMBNAILS_FOLDER_ID){(async()=>{for(const item of newlyAdded){try{await getOrCreateThumbnail(item);console.log('Created Drive thumbnail for new design:',item.name)}catch(e){console.warn('Could not create Drive thumbnail:',item.id,e.message)}}})().catch(console.error);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
  errors=failures;scannedFolders=count;sourceStats=stats;
  }catch(e){errors=[e.message]}finally{syncing=false;}
