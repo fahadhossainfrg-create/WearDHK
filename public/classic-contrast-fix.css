@@ -60,3 +60,18 @@ html[data-theme="light"] .modal-actions :is(a,button){color:#20333f!important;ba
 
 /* Duplicate label sits over a bright thumbnail; keep its own ink colors in dark mode. */
 html[data-theme="dark"] #gallery .image-wrap .duplicate-badge{background:#ffd98f!important;color:#241604!important;-webkit-text-fill-color:#241604!important;border-color:#d8a84e!important;opacity:1!important;text-shadow:none!important;box-shadow:0 2px 10px #0004!important}
+
+
+/* Keep the desktop sidebar rail continuous for the full document height.
+   The sidebar itself stays sticky; the shell paints the rail below it. */
+@media(min-width:751px){
+  .shell{background:linear-gradient(to right,var(--ink,#1d3037) 0 250px,var(--paper,#f4f4f3) 250px 100%)}
+}
+@media(min-width:751px) and (max-width:1100px){
+  .shell{background:linear-gradient(to right,var(--ink,#1d3037) 0 210px,var(--paper,#f4f4f3) 210px 100%)}
+}
+@media(max-width:750px){
+  .shell{width:100%!important;max-width:100%!important;background:var(--paper,#f4f4f3)!important}
+  .sidebar{max-width:100%!important}
+  .main{width:100%!important;max-width:100%!important;margin:0!important;overflow-x:hidden}
+}
