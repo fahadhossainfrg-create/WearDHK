@@ -4,6 +4,10 @@ const sharp=require('sharp');
 // Keep thumbnail generation within the 512 MiB Render instance.
 sharp.cache(false);
 sharp.concurrency(1);
+// Keep PNG decompression and concurrent preview requests bounded on the 512 MiB instance.
+sharp.cache({memory:32,files:0,items:20});
+let activePreviewJobs=0;const previewWaiters=[];
+async function withPreviewSlot(task){if(activePreviewJobs>=2)await new Promise(resolve=>previewWaiters.push(resolve));activePreviewJobs++;try{return await task()}finally{activePreviewJobs--;previewWaiters.shift()?.();}}
 const roots=[
  {id:'128JL_dyiO2xFXaRKh4zj8al5w2Y6XoNP',name:'Main Library'},
  {id:'1QImLRpunvmjkhHc8_CqewTw7u6lqvoLb',name:'Organised Library'},
@@ -73,8 +77,8 @@ async function drainThumbnailQueue(){
  finally{thumbnailPreparationRunning=false;if(thumbnailPreparationQueue.length)void drainThumbnailQueue();}
 }
 function scheduleThumbnailPreparation(rows,previousIds){
- // Background conversions are opt-in on small instances to avoid OOM restarts.
- if(process.env.ENABLE_BACKGROUND_THUMBNAILS==='false')return;
+ // Background conversions stay off unless explicitly enabled; generate previews on demand.
+ if(process.env.ENABLE_BACKGROUND_THUMBNAILS!=='true')return;
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
  const candidates=rows.filter(item=>(/^image\/(png|jpeg|webp)$/i.test(item.mime||'')&&Number(item.size||0)<=10*1024*1024)||/\.(ai|eps|pdf)$/i.test(item.name||''));
  const fresh=[],backfill=[],now=Date.now();
@@ -96,7 +100,7 @@ async function loadGeneratedThumbnail(sourceId){
 async function createDriveThumbnail(item){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)throw Error('GOOGLE_THUMBNAILS_FOLDER_ID is not configured');
  let bytes,sourceError;
- try{if(/\.(ai|eps|pdf)$/i.test(item.name||''))throw Error('Vector/document preview uses Google Drive thumbnail');const original=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');const input=Buffer.from(await original.arrayBuffer());if(input.length>40*1024*1024)throw Error('Original exceeds thumbnail input limit');bytes=await sharp(input,{limitInputPixels:50000000,failOn:'none'}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
+ try{if(/\.(ai|eps|pdf)$/i.test(item.name||''))throw Error('Vector/document preview uses Google Drive thumbnail');const original=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');const input=Buffer.from(await original.arrayBuffer());if(input.length>40*1024*1024)throw Error('Original exceeds thumbnail input limit');bytes=await sharp(input,{limitInputPixels:20000000,failOn:'none'}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
  catch(e){sourceError=e;const metadata=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?fields=thumbnailLink&supportsAllDrives=true')).json();const link=item.thumbnail||metadata.thumbnailLink;if(!link)throw sourceError;const fallback=await fetch(link,{headers:{authorization:'Bearer '+await token()}});if(!fallback.ok)throw Error('Original preview failed ('+sourceError.message+'); Drive thumbnail HTTP '+fallback.status);if(Number(fallback.headers.get('content-length')||0)>4*1024*1024)throw Error('Drive preview exceeds 4 MB limit');const fallbackBytes=Buffer.from(await fallback.arrayBuffer());if(fallbackBytes.length>4*1024*1024)throw Error('Drive preview exceeds 4 MB limit');bytes=await sharp(fallbackBytes,{limitInputPixels:12000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
  const metadata={name:item.id+'.webp',mimeType:'image/webp',parents:[folder],appProperties:{wearDhkSourceId:item.id}};
  const form=new FormData();form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));form.append('file',new Blob([bytes],{type:'image/webp'}),metadata.name);
@@ -207,7 +211,7 @@ async function handler(req,res){
     const original=await drive(media);
     const input=Buffer.from(await original.arrayBuffer());
     if(input.length<=40*1024*1024){
-     const bytes=await sharp(input,{limitInputPixels:50000000,failOn:'none'}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();
+     const bytes=await sharp(input,{limitInputPixels:20000000,failOn:'none'}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();
      return {bytes,mime:'image/webp'};
     }
    }
@@ -221,7 +225,7 @@ async function handler(req,res){
   };
   const thumbOnly=u.searchParams.get('thumb')==='1',cacheKey=id+(thumbOnly?':thumb':':full');
   const cached=previewCache.get(cacheKey);let image=cached&&cached.expires>Date.now()?cached.image:null;
-  if(!image&&thumbOnly){try{image=await requestThumbnail()}catch(e){console.warn('Quick thumbnail unavailable; trying original:',id,e.message)}}
+  if(!image&&thumbOnly){try{image=await withPreviewSlot(requestThumbnail)}catch(e){console.warn('Quick thumbnail unavailable; trying original:',id,e.message)}}
   if(!image)try{
     if(/^image\//.test(item.mime||'') && item.size<=12*1024*1024){
       const response=await drive(media);
@@ -229,7 +233,7 @@ async function handler(req,res){
       if(bytes.length<=15*1024*1024)image={bytes,mime:item.mime};
     }
   }catch(e){console.warn('Full image preview failed; trying thumbnail:',id,e.message)}
-  if(!image){try{image=await requestThumbnail()}catch(e){console.warn('Thumbnail unavailable:',id,e.message);return json(res,{error:'Cannot generate preview for this file',driveUrl:item.url},502)}}
+  if(!image){try{image=await withPreviewSlot(requestThumbnail)}catch(e){console.warn('Thumbnail unavailable:',id,e.message);return json(res,{error:'Cannot generate preview for this file',driveUrl:item.url},502)}}
   if(image.bytes.length>15*1024*1024)return json(res,{error:'Preview exceeds size limit'},413);
   if(image.bytes.length<=2*1024*1024){if(previewCache.has(cacheKey))previewCache.delete(cacheKey);while(previewCache.size>=MAX_PREVIEWS_IN_MEMORY)previewCache.delete(previewCache.keys().next().value);previewCache.set(cacheKey,{image,expires:Date.now()+10*60*1000})}
   res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':'private,max-age=900','x-content-type-options':'nosniff'});
