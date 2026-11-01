@@ -8,7 +8,8 @@ const roots=[
  {id:'128JL_dyiO2xFXaRKh4zj8al5w2Y6XoNP',name:'Main Library'},
  {id:'1QImLRpunvmjkhHc8_CqewTw7u6lqvoLb',name:'Organised Library'},
  {id:'1MPdvOZSFs0uUwS3qYOzY9m5-_61DloDW',name:'New Designs'},
- {id:'1SpCQMhm_iu7kYEWG81xIbjJbh2FABdoc',name:'Plain Chapter'}];
+ {id:'1SpCQMhm_iu7kYEWG81xIbjJbh2FABdoc',name:'Plain Chapter'},
+ {id:'1SVpCjSso_sfSxo-mCGihWWW4uAzwPI2D',name:'Streetwear Abstract & Graphic'}];
 const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(4,Math.min(12,Number(process.env.SYNC_CONCURRENCY||8)));
 let catalogue=[],snapshotCount=0;try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort(),byId=new Map();for(const name of names){const rows=JSON.parse(fs.readFileSync(path.join(__dirname,name),'utf8'));if(Array.isArray(rows))for(const row of rows)if(row?.id)byId.set(row.id,row)}catalogue=Array.from(byId.values());snapshotCount=catalogue.length;console.log('Persistent catalogue files:',names.length,'unique designs:',snapshotCount)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
