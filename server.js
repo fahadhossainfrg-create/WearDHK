@@ -96,7 +96,7 @@ async function loadGeneratedThumbnail(sourceId){
 async function createDriveThumbnail(item){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)throw Error('GOOGLE_THUMBNAILS_FOLDER_ID is not configured');
  let bytes,sourceError;
- try{if(/\.(ai|eps|pdf)$/i.test(item.name||''))throw Error('Vector/document preview uses Google Drive thumbnail');const original=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');const input=Buffer.from(await original.arrayBuffer());if(input.length>40*1024*1024)throw Error('Original exceeds thumbnail input limit');bytes=await sharp(input,{limitInputPixels:50000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
+ try{if(/\.(ai|eps|pdf)$/i.test(item.name||''))throw Error('Vector/document preview uses Google Drive thumbnail');const original=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?alt=media&supportsAllDrives=true');const input=Buffer.from(await original.arrayBuffer());if(input.length>40*1024*1024)throw Error('Original exceeds thumbnail input limit');bytes=await sharp(input,{limitInputPixels:50000000,failOn:'none'}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
  catch(e){sourceError=e;const metadata=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(item.id)+'?fields=thumbnailLink&supportsAllDrives=true')).json();const link=item.thumbnail||metadata.thumbnailLink;if(!link)throw sourceError;const fallback=await fetch(link,{headers:{authorization:'Bearer '+await token()}});if(!fallback.ok)throw Error('Original preview failed ('+sourceError.message+'); Drive thumbnail HTTP '+fallback.status);if(Number(fallback.headers.get('content-length')||0)>4*1024*1024)throw Error('Drive preview exceeds 4 MB limit');const fallbackBytes=Buffer.from(await fallback.arrayBuffer());if(fallbackBytes.length>4*1024*1024)throw Error('Drive preview exceeds 4 MB limit');bytes=await sharp(fallbackBytes,{limitInputPixels:12000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();}
  const metadata={name:item.id+'.webp',mimeType:'image/webp',parents:[folder],appProperties:{wearDhkSourceId:item.id}};
  const form=new FormData();form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));form.append('file',new Blob([bytes],{type:'image/webp'}),metadata.name);
@@ -207,7 +207,7 @@ async function handler(req,res){
     const original=await drive(media);
     const input=Buffer.from(await original.arrayBuffer());
     if(input.length<=40*1024*1024){
-     const bytes=await sharp(input,{limitInputPixels:50000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();
+     const bytes=await sharp(input,{limitInputPixels:50000000,failOn:'none'}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();
      return {bytes,mime:'image/webp'};
     }
    }
