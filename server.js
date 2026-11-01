@@ -199,6 +199,18 @@ async function handler(req,res){
   if(!item||!item.preview)return json(res,{error:'Preview unavailable'},404);
   const media='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true';
   const requestThumbnail=async()=>{
+   // For raster images, build the quick preview from the already indexed source
+   // file. Drive's thumbnailLink is often absent; looking up or uploading a
+   // generated thumbnail here made the first modal paint wait on several API
+   // calls. Persistent Drive thumbnails are still prepared in the background.
+   if(/^image\/(png|jpeg|webp)$/i.test(item.mime||'')&&Number(item.size||0)<=40*1024*1024){
+    const original=await drive(media);
+    const input=Buffer.from(await original.arrayBuffer());
+    if(input.length<=40*1024*1024){
+     const bytes=await sharp(input,{limitInputPixels:50000000}).rotate().resize({width:480,height:480,fit:'inside',withoutEnlargement:true}).webp({quality:76}).toBuffer();
+     return {bytes,mime:'image/webp'};
+    }
+   }
    const metadata=await(await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?fields=thumbnailLink,mimeType&supportsAllDrives=true')).json();
    const link=item.thumbnail||metadata.thumbnailLink;
    if(!link)return getOrCreateThumbnail(item);
