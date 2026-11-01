@@ -57,7 +57,7 @@ async function children(id){
  do{const u=new URL('https://www.googleapis.com/drive/v3/files');u.searchParams.set('q',"'"+id+"' in parents and trashed = false");u.searchParams.set('fields','nextPageToken,files(id,name,mimeType,modifiedTime,size,description,webViewLink,thumbnailLink,md5Checksum)');u.searchParams.set('pageSize','1000');u.searchParams.set('supportsAllDrives','true');u.searchParams.set('includeItemsFromAllDrives','true');if(next)u.searchParams.set('pageToken',next);
  const data=await(await drive(u)).json();found.push(...(data.files||[]));next=data.nextPageToken||'';}while(next);return found;
 }
-const thumbnailFiles=new Map(),thumbnailRetry=new Map(),persistedThumbnailIds=new Set(),queuedThumbnailIds=new Set();
+const thumbnailFiles=new Map(),thumbnailRetry=new Map(),persistedThumbnailIds=new Set(),persistedThumbnailFiles=new Map(),queuedThumbnailIds=new Set();
 const MAX_THUMBNAILS_IN_MEMORY=12,MAX_PREVIEWS_IN_MEMORY=8;
 function cacheThumbnail(id,value){
  if(thumbnailFiles.has(id))thumbnailFiles.delete(id);
@@ -68,7 +68,7 @@ function cacheThumbnail(id,value){
 let thumbnailPreparationQueue=[],thumbnailPreparationRunning=false;
 async function refreshThumbnailIndex(){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return;
- try{const files=await children(folder);persistedThumbnailIds.clear();for(const file of files){const name=String(file.name||'');if(/\.webp$/i.test(name))persistedThumbnailIds.add(name.replace(/\.webp$/i,''));}}
+ try{const files=await children(folder);persistedThumbnailIds.clear();persistedThumbnailFiles.clear();for(const file of files){const name=String(file.name||'');if(/\.webp$/i.test(name)){const sourceId=name.replace(/\.webp$/i,'');persistedThumbnailIds.add(sourceId);persistedThumbnailFiles.set(sourceId,file.id);}}}
  catch(e){console.warn('Could not refresh saved thumbnail index:',e.message)}
 }
 async function drainThumbnailQueue(){
@@ -90,12 +90,17 @@ function scheduleThumbnailPreparation(rows,previousIds){
 }
 async function loadGeneratedThumbnail(sourceId){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)return null;
- const query=new URL('https://www.googleapis.com/drive/v3/files');
- query.searchParams.set('q',"'"+folder+"' in parents and appProperties has { key='wearDhkSourceId' and value='"+sourceId+"' } and trashed = false");
- query.searchParams.set('fields','files(id,name,mimeType)');query.searchParams.set('pageSize','1');query.searchParams.set('supportsAllDrives','true');query.searchParams.set('includeItemsFromAllDrives','true');
- const data=await(await drive(query)).json();let file=data.files?.[0];if(!file){const byName=new URL('https://www.googleapis.com/drive/v3/files');byName.searchParams.set('q',"'"+folder+"' in parents and name='"+sourceId+".webp' and trashed = false");byName.searchParams.set('fields','files(id,name,mimeType)');byName.searchParams.set('pageSize','1');byName.searchParams.set('supportsAllDrives','true');byName.searchParams.set('includeItemsFromAllDrives','true');const named=await(await drive(byName)).json();file=named.files?.[0];}if(!file)return null;
- const response=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(file.id)+'?alt=media&supportsAllDrives=true');
- return {bytes:Buffer.from(await response.arrayBuffer()),mime:file.mimeType||'image/webp',driveThumbnailId:file.id};
+ let fileId=persistedThumbnailFiles.get(sourceId);
+ if(!fileId){
+  const query=new URL('https://www.googleapis.com/drive/v3/files');
+  query.searchParams.set('q',"'"+folder+"' in parents and appProperties has { key='wearDhkSourceId' and value='"+sourceId+"' } and trashed = false");
+  query.searchParams.set('fields','files(id,name,mimeType)');query.searchParams.set('pageSize','1');query.searchParams.set('supportsAllDrives','true');query.searchParams.set('includeItemsFromAllDrives','true');
+  const data=await(await drive(query)).json();let file=data.files?.[0];
+  if(!file){const byName=new URL('https://www.googleapis.com/drive/v3/files');byName.searchParams.set('q',"'"+folder+"' in parents and name='"+sourceId+".webp' and trashed = false");byName.searchParams.set('fields','files(id,name,mimeType)');byName.searchParams.set('pageSize','1');byName.searchParams.set('supportsAllDrives','true');byName.searchParams.set('includeItemsFromAllDrives','true');const named=await(await drive(byName)).json();file=named.files?.[0];}
+  if(!file)return null;fileId=file.id;persistedThumbnailIds.add(sourceId);persistedThumbnailFiles.set(sourceId,fileId);
+ }
+ const response=await drive('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media&supportsAllDrives=true');
+ return {bytes:Buffer.from(await response.arrayBuffer()),mime:'image/webp',driveThumbnailId:fileId};
 }
 async function createDriveThumbnail(item){
  const folder=process.env.GOOGLE_THUMBNAILS_FOLDER_ID;if(!folder)throw Error('GOOGLE_THUMBNAILS_FOLDER_ID is not configured');
@@ -106,7 +111,7 @@ async function createDriveThumbnail(item){
  const form=new FormData();form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));form.append('file',new Blob([bytes],{type:'image/webp'}),metadata.name);
  const response=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,mimeType',{method:'POST',headers:{authorization:'Bearer '+await thumbnailUploadToken()},body:form});
  if(!response.ok){const detail=(await response.text()).slice(0,180);console.warn('Thumbnail generated but Drive storage is unavailable; keeping preview in memory:',item.id,response.status,detail);return {bytes,mime:'image/webp',driveThumbnailId:null,stored:false};}
- const saved=await response.json();return {bytes,mime:'image/webp',driveThumbnailId:saved.id,stored:true};
+ const saved=await response.json();persistedThumbnailIds.add(item.id);persistedThumbnailFiles.set(item.id,saved.id);return {bytes,mime:'image/webp',driveThumbnailId:saved.id,stored:true};
 }
 async function getOrCreateThumbnail(item){
  if(thumbnailFiles.has(item.id))return thumbnailFiles.get(item.id);
@@ -237,7 +242,7 @@ async function handler(req,res){
   if(!image){try{image=await requestThumbnail()}catch(e){console.warn('Thumbnail unavailable:',id,e.message);return json(res,{error:'Cannot generate preview for this file',driveUrl:item.url},502)}}
   if(image.bytes.length>15*1024*1024)return json(res,{error:'Preview exceeds size limit'},413);
   if(image.bytes.length<=2*1024*1024){if(previewCache.has(cacheKey))previewCache.delete(cacheKey);while(previewCache.size>=MAX_PREVIEWS_IN_MEMORY)previewCache.delete(previewCache.keys().next().value);previewCache.set(cacheKey,{image,expires:Date.now()+10*60*1000})}
-  res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':'private,max-age=900','x-content-type-options':'nosniff'});
+  res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':thumbOnly?'private,max-age=86400,stale-while-revalidate=604800':'private,max-age=900','x-content-type-options':'nosniff'});
   return res.end(image.bytes);
  }
  if(req.method!=='GET')return json(res,{error:'Method not allowed'},405);
