@@ -15,6 +15,7 @@ const roots=[
  {id:'1SpCQMhm_iu7kYEWG81xIbjJbh2FABdoc',name:'Plain Chapter'},
  {id:'1eezT3YkxNPtcXLYspw4DqMt3vz-3v_bm',name:'Random'},
  {id:'1GB6-1vREDkrDTYk_2d_I1sd-stSoJVs7',name:'WearDHK Apparel'}];
+const displayNameOverrides={'1R5dlj_Dr0MdTfk__D2ZYjlBY1iAUsgrb':'শহর আলো নিচে থাকি আঁধারে — Shohor Alo Niche Thaki Andhare Bengali City Skyline Typography 4K.png'};
 const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(4,Math.min(12,Number(process.env.SYNC_CONCURRENCY||8)));
 let catalogue=[],snapshotCount=0;try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort(),byId=new Map();for(const name of names){const rows=JSON.parse(fs.readFileSync(path.join(__dirname,name),'utf8'));if(Array.isArray(rows))for(const row of rows)if(row?.id)byId.set(row.id,row)}catalogue=Array.from(byId.values());snapshotCount=catalogue.length;console.log('Persistent catalogue files:',names.length,'unique designs:',snapshotCount)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
@@ -127,7 +128,7 @@ async function sync(){
  try{const files=await children(task.id);count++;stats[task.source].folders++;for(const file of files){
  if(file.mimeType==='application/vnd.google-apps.folder'){queue.push({id:file.id,source:task.source,path:[...task.path,file.name]});continue;}
  if(!(/^image\//.test(file.mimeType||'')||/\.(ai|eps|svg|pdf|psd|webp|png|jpe?g|avif|tiff?)$/i.test(file.name)))continue;
- stats[task.source].files++;rows.push({id:file.id,name:file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink||/\.(ai|eps|pdf)$/i.test(file.name),thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
+ stats[task.source].files++;rows.push({id:file.id,name:displayNameOverrides[file.id]||file.name,source:task.source,category:task.path[0]||'Uncategorised',folder:task.path.join(' / '),mime:file.mimeType||'',preview:/^image\//.test(file.mimeType||'')||!!file.thumbnailLink||/\.(ai|eps|pdf)$/i.test(file.name),thumbnail:file.thumbnailLink||'',checksum:file.md5Checksum||'',updated:file.modifiedTime||'',size:Number(file.size||0),description:file.description||'',url:file.webViewLink||'https://drive.google.com/file/d/'+file.id+'/view'});}
  }catch(e){stats[task.source].errors++;failures.push(task.source+' / '+task.path.join('/')+': '+e.message)}}));scannedFolders=count;sourceStats=stats;}
  if(!failures.length&&rows.length){const previousIds=new Set(catalogue.map(x=>x.id));catalogue=rows.sort((a,b)=>b.updated.localeCompare(a.updated));duplicateCache=null;snapshotCount=0;syncedAt=new Date().toISOString();console.log('Drive sync complete:',rows.length,'designs across',count,'folders');
  if(process.env.GOOGLE_THUMBNAILS_FOLDER_ID){await refreshThumbnailIndex();scheduleThumbnailPreparation(rows,previousIds);}}else{if(!rows.length&&!failures.length)failures.push('Drive returned zero design files; retaining saved catalogue');console.error('Drive sync incomplete:',failures.slice(0,20).join(' | '));}
