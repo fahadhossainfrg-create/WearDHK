@@ -15,7 +15,9 @@ function categories(){const list=state.categories.filter(x=>state.source==='All'
 function modalFavorite(){$('modalFavorite').textContent=favs.has(state.selected.id)?'♥ Remove favourite':'♡ Save favourite';$('modalFavorite').setAttribute('aria-pressed',String(favs.has(state.selected.id)))}
 const recentKey='weardhk-recent';function readRecent(){try{return JSON.parse(localStorage.getItem(recentKey)||'[]')}catch{return []}};
 function trackRecent(x){const entries=[{id:x.id,name:x.name},...readRecent().filter(v=>v.id!==x.id)].slice(0,30);try{localStorage.setItem(recentKey,JSON.stringify(entries))}catch{}}
-function detail(x,loadedThumb){
+const designPath=id=>'/design/'+encodeURIComponent(id);
+function detail(x,loadedThumb,updateUrl=true){
+ if(updateUrl&&location.pathname!==designPath(x.id))history.pushState({designId:x.id},'',designPath(x.id));
  trackRecent(x);state.selected=x;
  $('modalSource').textContent=x.source+' / '+x.category;$('modalTitle').textContent=clean(x.name);$('modalPath').textContent=x.folder||'Root directory';
  $('openDrive').href='/api/open/'+encodeURIComponent(x.id);$('openDrive').onclick=()=>setTimeout(loadPopular,1800);
@@ -79,7 +81,7 @@ try{if(localStorage.getItem('weardhk-focus')==='true'){$('focusMode').click()}}c
 $('surprise').onclick=()=>{if(!state.items.length){toast('No artwork loaded yet');return;}const random=state.items[Math.floor(Math.random()*state.items.length)];detail(random)};
 $('modalPrev').onclick=()=>stepPreview(-1);
 $('modalNext').onclick=()=>stepPreview(1);
-$('copyLink').onclick=async()=>{if(!state.selected)return;const link=state.selected.url;try{await navigator.clipboard.writeText(link);toast('Google Drive link copied')}catch{window.prompt('Copy design link:',link)}};
+$('copyLink').onclick=async()=>{if(!state.selected)return;const link=new URL(designPath(state.selected.id),location.origin).href;try{await navigator.clipboard.writeText(link);toast('WearDHK link copied')}catch{window.prompt('Copy WearDHK design link:',link)}};
 
 $('exploreNow').onclick=()=>document.querySelector('.explore').scrollIntoView({behavior:'smooth'});
 $('viewGrid').onclick=()=>setGalleryView(false);
@@ -90,6 +92,10 @@ document.addEventListener('keydown',e=>{const inField=['INPUT','TEXTAREA','SELEC
 
 
 $('modalFavorite').onclick=()=>toggleFav(state.selected.id);
-$('close').onclick=()=>$('preview').close();
-$('preview').onclick=e=>{if(e.target===$('preview'))$('preview').close()};
-status();setInterval(()=>{if(!retryTimer)status()},5*60*1000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)status()});window.addEventListener('online',()=>status());
+function closePreview(){if($('preview').open)$('preview').close();if(/^\/design\/[^/]+$/.test(location.pathname))history.pushState(null,'','/')}
+async function openSharedDesignFromPath(){const match=location.pathname.match(/^\/design\/([^/]+)$/);if(!match)return;try{const item=await api('/api/design/'+match[1]);if(!state.items.some(x=>x.id===item.id))state.items=[item,...state.items];detail(item,null,false)}catch(e){note('This shared design is not available right now. ('+e.message+')')}}
+$('close').onclick=closePreview;
+$('preview').onclick=e=>{if(e.target===$('preview'))closePreview()};
+$('preview').addEventListener('cancel',e=>{e.preventDefault();closePreview()});
+window.addEventListener('popstate',()=>{if(/^\/design\/[^/]+$/.test(location.pathname))openSharedDesignFromPath();else if($('preview').open)$('preview').close()});
+status();openSharedDesignFromPath();setInterval(()=>{if(!retryTimer)status()},5*60*1000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)status()});window.addEventListener('online',()=>status());
