@@ -100,3 +100,31 @@ html[data-theme="dark"] #gallery .image-wrap .duplicate-badge{background:#ffd98f
   .sidebar{width:210px!important}
   .main{margin-left:210px!important;width:calc(100% - 210px)!important}
 }
+
+
+/* Dark mode must paint the complete browser canvas, including the space
+   beyond the centred/max-width main column on wide desktop screens. */
+html[data-theme="dark"],
+html[data-theme="dark"] body{
+  min-width:100%;
+  min-height:100%;
+  background:#111c24!important;
+}
+html[data-theme="dark"] .shell{
+  background:#111c24!important;
+}
+@media(min-width:751px){
+  html[data-theme="dark"] .shell{
+    background:linear-gradient(to right,#182934 0 250px,#111c24 250px 100%)!important;
+  }
+}
+@media(min-width:751px) and (max-width:1100px){
+  html[data-theme="dark"] .shell{
+    background:linear-gradient(to right,#182934 0 210px,#111c24 210px 100%)!important;
+  }
+}
+@media(max-width:750px){
+  html[data-theme="dark"] .shell{
+    background:#111c24!important;
+  }
+}
