@@ -128,3 +128,25 @@ html[data-theme="dark"] .shell{
     background:#111c24!important;
   }
 }
+
+
+/* Keep the native browser scrollbar gutter dark as part of the dark canvas. */
+html[data-theme="dark"]{
+  color-scheme:dark;
+  scrollbar-color:#536873 #111c24;
+}
+html[data-theme="dark"]::-webkit-scrollbar,
+html[data-theme="dark"] body::-webkit-scrollbar{
+  width:12px;
+  height:12px;
+}
+html[data-theme="dark"]::-webkit-scrollbar-track,
+html[data-theme="dark"] body::-webkit-scrollbar-track{
+  background:#111c24;
+}
+html[data-theme="dark"]::-webkit-scrollbar-thumb,
+html[data-theme="dark"] body::-webkit-scrollbar-thumb{
+  background:#536873;
+  border:3px solid #111c24;
+  border-radius:999px;
+}
