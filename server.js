@@ -216,7 +216,7 @@ async function handler(req,res){
    // generated thumbnail here made the first modal paint wait on several API
    // calls. Persistent Drive thumbnails are still prepared in the background.
    if(/^image\/(png|jpeg|webp)$/i.test(item.mime||'')&&Number(item.size||0)<=8*1024*1024){
-    const saved=await loadGeneratedThumbnail(item.id);if(saved)return saved;
+    const saved=item.id==='1z4Hz0V8a-xEE6DV5_KdVvpo5jRCu_314'?null:await loadGeneratedThumbnail(item.id);if(saved)return saved;
     const original=await drive(media);
     const input=Buffer.from(await original.arrayBuffer());
     if(input.length<=8*1024*1024){
@@ -232,7 +232,7 @@ async function handler(req,res){
     return {bytes:Buffer.from(await response.arrayBuffer()),mime:response.headers.get('content-type')||'image/jpeg'};
    }catch(e){console.warn('Drive thumbnail failed; generating a stored thumbnail:',id,e.message);return getOrCreateThumbnail(item)}
   };
-  const thumbOnly=u.searchParams.get('thumb')==='1',cacheKey=id+(thumbOnly?':thumb':':full');
+  const thumbOnly=u.searchParams.get('thumb')==='1',cacheKey=id+':'+String(item.updated||'')+(thumbOnly?':thumb':':full');
   const cached=previewCache.get(cacheKey);let image=cached&&cached.expires>Date.now()?cached.image:null;
   if(!image&&thumbOnly){try{image=await requestThumbnail()}catch(e){console.warn('Quick thumbnail unavailable; trying original:',id,e.message)}}
   if(!image)try{
@@ -245,7 +245,7 @@ async function handler(req,res){
   if(!image){try{image=await requestThumbnail()}catch(e){console.warn('Thumbnail unavailable:',id,e.message);return json(res,{error:'Cannot generate preview for this file',driveUrl:item.url},502)}}
   if(image.bytes.length>15*1024*1024)return json(res,{error:'Preview exceeds size limit'},413);
   if(image.bytes.length<=2*1024*1024){if(previewCache.has(cacheKey))previewCache.delete(cacheKey);while(previewCache.size>=MAX_PREVIEWS_IN_MEMORY)previewCache.delete(previewCache.keys().next().value);previewCache.set(cacheKey,{image,expires:Date.now()+3*60*1000})}
-  res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':thumbOnly?'private,max-age=86400,stale-while-revalidate=604800':'private,max-age=900','x-content-type-options':'nosniff'});
+  res.writeHead(200,{'content-type':image.mime,'content-length':image.bytes.length,'cache-control':thumbOnly?'private,max-age=300':'private,max-age=900','x-content-type-options':'nosniff'});
   return res.end(image.bytes);
  }
  if(req.method!=='GET')return json(res,{error:'Method not allowed'},405);
