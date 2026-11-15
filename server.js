@@ -15,7 +15,7 @@ const roots=[
  {id:'1SpCQMhm_iu7kYEWG81xIbjJbh2FABdoc',name:'Plain Chapter'},
  {id:'1eezT3YkxNPtcXLYspw4DqMt3vz-3v_bm',name:'Random'},
  {id:'1GB6-1vREDkrDTYk_2d_I1sd-stSoJVs7',name:'WearDHK Apparel'}];
-const displayNameOverrides={'1R5dlj_Dr0MdTfk__D2ZYjlBY1iAUsgrb':'সব আলো নিভে যাক আধারে — Shob Alo Nive Jak Adhare Bengali City Skyline Typography 4K.png'};
+const displayNameOverrides={'1R5dlj_Dr0MdTfk__D2ZYjlBY1iAUsgrb':'সব আলো নিভে যাক আধারে — Shob Alo Nive Jak Adhare Bengali City Skyline Typography 4K.png','1z4Hz0V8a-xEE6DV5_KdVvpo5jRCu_314':'Make Your Dreams Come True 4K Transparent.png'};
 const port=Number(process.env.PORT||3000),interval=Math.max(1,Number(process.env.SYNC_MINUTES||5)),scanConcurrency=Math.max(4,Math.min(12,Number(process.env.SYNC_CONCURRENCY||8)));
 let catalogue=[],snapshotCount=0;try{const names=fs.readdirSync(__dirname).filter(n=>/^catalogue-[a-z0-9-]+\.json$/i.test(n)).sort(),byId=new Map();for(const name of names){const rows=JSON.parse(fs.readFileSync(path.join(__dirname,name),'utf8'));if(Array.isArray(rows))for(const row of rows)if(row?.id)byId.set(row.id,row)}catalogue=Array.from(byId.values());snapshotCount=catalogue.length;console.log('Persistent catalogue files:',names.length,'unique designs:',snapshotCount)}catch(e){console.warn('Catalogue snapshot unavailable:',e.message)}
 const previewCache=new Map();
@@ -210,7 +210,18 @@ async function handler(req,res){
   const id=u.pathname.slice('/api/image/'.length),item=catalogue.find(x=>x.id===id);
   if(!item||!item.preview)return json(res,{error:'Preview unavailable'},404);
   const media='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&supportsAllDrives=true';
-  const requestThumbnail=async()=>{
+  // Replaced file: bypass old Google-generated thumbnail and preview cache, always source from current original.
+   if(id==='1z4Hz0V8a-xEE6DV5_KdVvpo5jRCu_314'){
+    const original=await drive(media);
+    const bytes=Buffer.from(await original.arrayBuffer());
+    if(bytes.length>15*1024*1024)return json(res,{error:'Source preview exceeds size limit'},413);
+    if(u.searchParams.get('thumb')==='1'){
+     const thumbnail=await withPreviewSlot(()=>sharp(bytes,{limitInputPixels:16000000,failOn:'none',sequentialRead:true}).rotate().resize({width:400,height:400,fit:'inside',withoutEnlargement:true}).webp({quality:75}).toBuffer());
+     res.writeHead(200,{'content-type':'image/webp','content-length':thumbnail.length,'cache-control':'no-store','x-content-type-options':'nosniff'});return res.end(thumbnail);
+    }
+    res.writeHead(200,{'content-type':'image/png','content-length':bytes.length,'cache-control':'no-store','x-content-type-options':'nosniff'});return res.end(bytes);
+   }
+   const requestThumbnail=async()=>{
    // For raster images, build the quick preview from the already indexed source
    // file. Drive's thumbnailLink is often absent; looking up or uploading a
    // generated thumbnail here made the first modal paint wait on several API
